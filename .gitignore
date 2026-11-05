@@ -1,0 +1,25 @@
+# Build artifacts & Kernel objects
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+*.symvers
+*.order
+*.zst
+*.xz
+*.gz
+
+# Temporary and backup files
+*.orig
+*.bak
+*.log
+/tmp/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# IDE configurations
+.vscode/
+.idea/
