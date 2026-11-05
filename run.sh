@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# run.sh — Entry Point Launcher for UART Shield GUI
+# run.sh — Entry Point Launcher for Kernel UART Patcher GUI
 # ==============================================================================
 
 set -euo pipefail

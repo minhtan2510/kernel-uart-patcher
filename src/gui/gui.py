@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UART Shield — Ultra-Compact Modern Minimalist Control Panel (PyQt6 Edition).
+Kernel UART Patcher — Ultra-Compact Modern Minimalist Control Panel (PyQt6 Edition).
 
 A sleek, hardware-accelerated desktop utility to prevent Linux kernel
 and userspace applications from asserting DTR/RTS on serial connection,
@@ -286,7 +286,7 @@ class UARTShieldApp(QWidget):
         """
         @brief Configure window title, geometry, and hardware styling.
         """
-        self.setWindowTitle("UART Shield")
+        self.setWindowTitle("Kernel UART Patcher")
         self.setFixedSize(self.WINDOW_WIDTH, self.HEIGHT_COLLAPSED)
         self._center_on_screen()
 
@@ -433,16 +433,16 @@ class UARTShieldApp(QWidget):
         hdr = QHBoxLayout()
         hdr.setSpacing(8)
 
-        lbl_title = QLabel("UART Shield")
-        lbl_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #0f172a;")
+        lbl_title = QLabel("Kernel UART Patcher")
+        lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #0f172a;")
         hdr.addWidget(lbl_title)
 
-        lbl_kernel = QLabel("KERNEL")
-        lbl_kernel.setStyleSheet(
+        lbl_badge = QLabel("DTR/RTS")
+        lbl_badge.setStyleSheet(
             "background: #e2e8f0; color: #475569; font-size: 10px; font-weight: bold; "
             "border-radius: 4px; padding: 2px 6px; font-family: monospace;"
         )
-        hdr.addWidget(lbl_kernel)
+        hdr.addWidget(lbl_badge)
         hdr.addStretch()
 
         self.btn_scan = QPushButton("↻ Scan")

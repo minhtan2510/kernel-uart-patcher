@@ -1,7 +1,7 @@
 # Project Memory & Architecture Context
 
 ## 1. Project Overview & Core Stack
-* **Repository:** `LinuxUART` — Linux USB-UART DTR/RTS Reset Shield.
+* **Repository:** `LinuxUART` — **Kernel UART Patcher** (Linux USB-UART DTR/RTS Reset Shield).
 * **Core Problem:** Linux kernel and userspace serial libraries (PySerial, QtSerialPort, Gimbal GUIs) automatically assert `DTR`/`RTS` (driving them LOW / 0V) on connect. On gimbals (Gremsy) and microcontrollers (STM32, ESP32, Arduino), `DTR` is hardwired to the MCU hardware `NRST`/`RESET` line, causing continuous resets upon connection.
 * **Architecture:**
   - **Single Entry Point:** [`run.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/run.sh) in root directory.
@@ -86,6 +86,14 @@
       - Stock Driver: Slate-100 (`#f1f5f9`), border Slate-300 (`#cbd5e1`), text Slate-600 (`#475569`).
     - Custom Port ComboBox Chevron: Replaced legacy Fusion 3D beveled arrow with custom antialiased vector chevron (`QPainterPath` with round cap/join in `PortComboBox.paintEvent`).
 * **Consequences:** Pristine, modern light theme with superior daylight readability and clean vector aesthetics.
+
+### [2026-11-05] ADR-09: Rebrand Project to `Kernel UART Patcher`
+* **Context:** The previous title `UART Shield` was ambiguous and frequently misidentified as an Arduino/Raspberry Pi hardware expansion board rather than an out-of-tree kernel driver patching utility.
+* **Decision:**
+  - Officially renamed the desktop tool and repository identity to **`Kernel UART Patcher`**.
+  - Updated window title: `Kernel UART Patcher`.
+  - Re-badged header tag from `KERNEL` to `DTR/RTS` to eliminate lexical redundancy (`Kernel UART Patcher • DTR/RTS`).
+* **Consequences:** Accurate technical branding reflecting its kernel-level out-of-tree patching capabilities.
 
 ---
 

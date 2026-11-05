@@ -1,4 +1,4 @@
-# Linux UART DTR/RTS Disable Tool (Deep Patch)
+# Kernel UART Patcher — Linux DTR/RTS Reset Shield (Deep Patch)
 
 Bộ công cụ giải quyết triệt để vấn đề Ubuntu Kernel và Ứng dụng điều khiển chân DTR/RTS khi kết nối UART, làm kéo chân Reset của thiết bị (Gimbal, STM32, ESP32, Arduino) xuống mức LOW.
 
