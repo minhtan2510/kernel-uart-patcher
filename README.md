@@ -31,7 +31,25 @@ Bản **Deep Patch** can thiệp toàn diện vào cả 5 tầng xử lý của 
 
 ---
 
-## 3. Hướng Dẫn Sử Dụng
+## 3. Hướng Dẫn Sử Dụng Giao Diện Đồ Họa (GUI)
+
+Để tiện cho nhiều người sử dụng trực quan mà không cần gõ lệnh:
+
+```bash
+cd ~/Desktop/Script/LinuxUART
+./run_gui.sh
+```
+
+**Tính năng trên giao diện đồ họa:**
+- Tự động nhận diện cổng và IC USB-UART khi cắm/rút thiết bị.
+- Xem trạng thái bảo vệ DTR/RTS và trạng thái bản vá kernel theo thời gian thực.
+- Nút **Bật Chặn Reset (DTR/RTS OFF)** / **Mặc Định Kernel** chuyển đổi nhanh tức thì.
+- Nút **Cài Đặt Deep Patch** và **Khôi Phục Driver Gốc** tích hợp sẵn popup hỏi mật khẩu đồ họa của Ubuntu (`pkexec`).
+- Khung nhật ký hoạt động (Terminal Log) hiển thị tiến trình chi tiết.
+
+---
+
+## 4. Hướng Dẫn Sử Dụng Bằng Dòng Lệnh (CLI)
 
 ### Bước 1: Áp dụng Deep Patch vào driver thiết bị (ví dụ CP2102N)
 ```bash
