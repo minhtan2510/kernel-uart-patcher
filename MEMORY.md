@@ -64,6 +64,15 @@
   - Added keyboard shortcuts (`Space` to toggle, `Ctrl+R` to scan, `Ctrl+L` for logs, `Esc` to quit) and double-click to copy port.
 * **Consequences:** Intuitive tactile control, zero accidental resets, and instant visibility into port locks.
 
+### [2026-11-05] ADR-07: Migration from Tkinter to PyQt6 for Hardware-Accelerated Modern UI
+* **Context:** Tkinter relies on 1990s X11 bitmap rendering without hardware acceleration or antialiased rounded borders, leading to crude, blocky visuals and poor FreeType font rendering. The host system already possesses PyQt6 (Qt 6.11.2).
+* **Decision:** Re-architected `src/gui/gui.py` to use PyQt6:
+  - Antialiased hardware-accelerated rounded rectangles (`border-radius: 12px;` on card, `border-radius: 8px;` on combobox & buttons).
+  - High-precision text shaping with HarfBuzz and subpixel antialiasing.
+  - 60fps animated toggle switch via `QPropertyAnimation`.
+  - Background asynchronous command execution via `QThread` and Qt signals/slots.
+* **Consequences:** Commercial-grade modern desktop aesthetics, fluid animations, crisp typography, and zero lag.
+
 ---
 
 ## 3. Known Gotchas & Constraints

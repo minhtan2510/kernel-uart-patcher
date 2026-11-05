@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-UART Shield — Ultra-Compact Modern Minimalist Control Panel.
+UART Shield — Ultra-Compact Modern Minimalist Control Panel (PyQt6 Edition).
 
-A sleek, lightweight desktop utility to prevent Linux kernel
+A sleek, hardware-accelerated desktop utility to prevent Linux kernel
 and userspace applications from asserting DTR/RTS on serial connection,
 protecting connected MCUs, gimbals, and development boards from unwanted resets.
 """
@@ -10,605 +10,513 @@ protecting connected MCUs, gimbals, and development boards from unwanted resets.
 import os
 import sys
 import subprocess
-import threading
-import queue
 import re
-import tkinter as tk
-import tkinter.font as tkfont
-from tkinter import ttk, messagebox
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox
+)
+from PyQt6.QtCore import (
+    Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
+    QEasingCurve, pyqtProperty
+)
+from PyQt6.QtGui import (
+    QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut
+)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
 
 # ------------------------------------------------------------------------------
-# Typography & Pixel-Grid Font Resolution
-# ------------------------------------------------------------------------------
-def resolve_best_font(preferred_list: list, fallback: str = "sans-serif") -> str:
-    """
-    @brief Resolve the highest priority static font available on the host system.
-    @param preferred_list List of preferred font names.
-    @param fallback Safe fallback name.
-    @return Verified font family name.
-    """
-    try:
-        available = set(tkfont.families())
-        for name in preferred_list:
-            if name in available:
-                return name
-    except Exception:
-        pass
-    return fallback
-
-
-# Primary UI font (Prioritize static PostScript/OTF fonts to avoid Linux variable-font raster artifacts)
-FONT_UI = resolve_best_font(
-    ["SF Pro Display", "Ubuntu", "DejaVu Sans", "Liberation Sans"],
-    "sans-serif"
-)
-
-# Monospace font for technical logs and hardware tags
-FONT_MONO = resolve_best_font(
-    ["SF Mono", "DejaVu Sans Mono", "Liberation Mono"],
-    "monospace"
-)
-
-# ------------------------------------------------------------------------------
 # Modern Minimalist Palette (Tailwind Slate / Zinc inspired)
 # ------------------------------------------------------------------------------
-COLOR_BG = "#090d16"           # Deep slate root background
-COLOR_SURFACE = "#111726"      # Card / container surface
-COLOR_SURFACE_HOVER = "#182238"# Surface on hover
-COLOR_BORDER = "#1e293b"       # 1px crisp border
-COLOR_BORDER_FOCUS = "#3b82f6" # Focus border
+COLOR_BG = "#0b0f19"              # Deep midnight slate
+COLOR_SURFACE = "#131b2e"         # Card surface
+COLOR_SURFACE_HOVER = "#1c2742"   # Surface hover
+COLOR_BORDER = "#1e293b"          # Base border
+COLOR_CARD_BORDER = "#25334d"     # Distinct card border
 
-COLOR_TEXT_PRIMARY = "#f8fafc" # Crisp white
-COLOR_TEXT_MUTED = "#94a3b8"   # Slate 400
-COLOR_TEXT_DIM = "#64748b"     # Slate 500
+COLOR_TEXT_PRIMARY = "#f8fafc"    # Crisp white
+COLOR_TEXT_MUTED = "#94a3b8"      # Slate 400
+COLOR_TEXT_DIM = "#64748b"        # Slate 500
 
-COLOR_EMERALD = "#10b981"      # Emerald 500 (Protected active)
-COLOR_EMERALD_BG = "#064e3b"   # Emerald deep badge bg
-COLOR_EMERALD_BORDER = "#059669"
+COLOR_EMERALD = "#10b981"         # Emerald 500
+COLOR_EMERALD_BG = "#064e3b"      # Deep emerald
+COLOR_EMERALD_BORDER = "#059669"  # Emerald border
 
-COLOR_AMBER = "#f59e0b"        # Amber 500 (Unprotected warning)
-COLOR_AMBER_BG = "#451a03"
-COLOR_AMBER_BORDER = "#b45309"
+COLOR_AMBER = "#f59e0b"           # Amber 500
+COLOR_AMBER_BG = "#451a03"        # Deep amber
+COLOR_AMBER_BORDER = "#b45309"    # Amber border
 
-COLOR_RED = "#ef4444"          # Red 500
-COLOR_RED_BG = "#381313"
-COLOR_RED_BORDER = "#7f1d1d"
-COLOR_RED_TEXT = "#fca5a5"
+COLOR_RED = "#ef4444"             # Red 500
+COLOR_RED_BG = "#381313"          # Deep red
+COLOR_RED_BORDER = "#7f1d1d"      # Red border
+COLOR_RED_TEXT = "#fca5a5"        # Soft red text
 
-COLOR_BLUE_BTN = "#2563eb"     # Blue 600
-COLOR_BLUE_BTN_HOVER = "#3b82f6"
-
-COLOR_BTN_SECONDARY = "#192235"
-COLOR_BTN_SECONDARY_HOVER = "#24314c"
-COLOR_BTN_SECONDARY_BORDER = "#27354f"
+COLOR_BLUE_BTN = "#2563eb"        # Blue 600
+COLOR_BLUE_HOVER = "#3b82f6"      # Blue 500
 
 
 # ------------------------------------------------------------------------------
-# Custom UI Components (Modern Switch & Flat Button)
+# Custom Animated Toggle Switch (PyQt6 Hardware-Accelerated Canvas)
 # ------------------------------------------------------------------------------
-class ModernSwitch(tk.Canvas):
+class AnimatedToggle(QWidget):
     """
-    @brief Crisp interactive pill toggle switch for runtime parameter switching.
+    @brief Hardware-accelerated modern pill toggle switch with 60fps sliding animation.
     """
-    def __init__(
-        self,
-        parent,
-        state: bool = True,
-        command=None,
-        width: int = 46,
-        height: int = 24,
-        bg_card: str = COLOR_SURFACE
-    ):
-        super().__init__(
-            parent,
-            width=width,
-            height=height,
-            bg=bg_card,
-            highlightthickness=0,
-            cursor="hand2"
-        )
-        self.state = state
-        self.enabled = True
-        self.command = command
-        self.width = width
-        self.height = height
+    toggled = pyqtSignal(bool)
 
-        self.bind("<Button-1>", self._on_click)
-        self.draw()
+    def __init__(self, parent=None, checked: bool = False):
+        super().__init__(parent)
+        self.setFixedSize(46, 24)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._checked = checked
+        self._position = 1.0 if checked else 0.0
+        self._enabled = True
 
-    def draw(self):
+        self.anim = QPropertyAnimation(self, b"thumbPosition", self)
+        self.anim.setDuration(160)
+        self.anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+    @pyqtProperty(float)
+    def thumbPosition(self) -> float:
+        return self._position
+
+    @thumbPosition.setter
+    def thumbPosition(self, pos: float):
+        self._position = pos
+        self.update()
+
+    def isChecked(self) -> bool:
+        return self._checked
+
+    def setChecked(self, checked: bool, animated: bool = True):
         """
-        @brief Render anti-aliased pill geometry and thumb.
+        @brief Set the toggle state with optional smooth animation.
+        @param checked Desired state.
+        @param animated If True, animate transition.
         """
-        self.delete("all")
-        h = self.height
-        w = self.width
-        r = h // 2
+        if self._checked != checked:
+            self._checked = checked
+            if animated and self.isVisible():
+                self.anim.stop()
+                self.anim.setStartValue(self._position)
+                self.anim.setEndValue(1.0 if checked else 0.0)
+                self.anim.start()
+            else:
+                self._position = 1.0 if checked else 0.0
+                self.update()
 
-        if not self.enabled:
-            bg = "#162033"
-            border = "#1e293b"
-            thumb = "#475569"
-            tx = r
-        elif self.state:
-            bg = COLOR_EMERALD
-            border = COLOR_EMERALD_BORDER
-            thumb = "#ffffff"
-            tx = w - r
-        else:
-            bg = "#1e293b"
-            border = "#334155"
-            thumb = "#94a3b8"
-            tx = r
-
-        # Pill background (arcs + center rectangle)
-        self.create_oval(1, 1, h - 1, h - 1, fill=bg, outline=border)
-        self.create_oval(w - h + 1, 1, w - 1, h - 1, fill=bg, outline=border)
-        self.create_rectangle(r, 1, w - r, h - 1, fill=bg, outline="")
-        self.create_line(r, 1, w - r, 1, fill=border)
-        self.create_line(r, h - 1, w - r, h - 1, fill=border)
-
-        # Thumb circle
-        pad = 3
-        tr = r - pad
-        self.create_oval(tx - tr, pad, tx + tr, h - pad, fill=thumb, outline="")
-
-    def _on_click(self, _):
-        """
-        @brief Handle user click event on switch.
-        """
-        if self.enabled:
-            self.state = not self.state
-            self.draw()
-            if self.command:
-                self.command(self.state)
-
-    def set_state(self, state: bool):
-        """
-        @brief Update switch toggle position without triggering command.
-        @param state True for ON, False for OFF.
-        """
-        self.state = state
-        self.draw()
-
-    def set_enabled(self, enabled: bool):
+    def setEnabled(self, enabled: bool):
         """
         @brief Enable or lock the switch.
-        @param enabled True for active, False for locked/grayed out.
+        @param enabled If False, gray out and ignore mouse clicks.
         """
-        self.enabled = enabled
-        self.configure(cursor="hand2" if enabled else "arrow")
-        self.draw()
+        self._enabled = enabled
+        self.setCursor(Qt.CursorShape.PointingHandCursor if enabled else Qt.CursorShape.ArrowCursor)
+        self.update()
 
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._enabled:
+            new_state = not self._checked
+            self.setChecked(new_state, animated=True)
+            self.toggled.emit(new_state)
 
-class FlatButton(tk.Label):
-    """
-    @brief Minimalist flat button with hover feedback, border color, and optional danger theme.
-    """
-    def __init__(
-        self,
-        parent,
-        text: str,
-        command=None,
-        bg=COLOR_BTN_SECONDARY,
-        hover_bg=COLOR_BTN_SECONDARY_HOVER,
-        fg=COLOR_TEXT_PRIMARY,
-        hover_fg=None,
-        font=(FONT_UI, -13, "bold"),
-        padx=10,
-        pady=6,
-        state=tk.NORMAL,
-        border_color=COLOR_BORDER,
-        hover_border_color=None,
-        **kwargs
-    ):
-        super().__init__(
-            parent,
-            text=text,
-            bg=bg,
-            fg=fg,
-            font=font,
-            padx=padx,
-            pady=pady,
-            cursor="hand2",
-            relief=tk.SOLID,
-            borderwidth=1 if border_color else 0,
-            highlightbackground=border_color if border_color else bg,
-            **kwargs
-        )
-        self.default_bg = bg
-        self.hover_bg = hover_bg
-        self.default_fg = fg
-        self.hover_fg = hover_fg if hover_fg else fg
-        self.border_color = border_color
-        self.hover_border_color = hover_border_color if hover_border_color else border_color
-        self.command = command
-        self.state_val = state
-
-        self.bind("<Enter>", self._on_enter)
-        self.bind("<Leave>", self._on_leave)
-        self.bind("<Button-1>", self._on_click)
-
-    def _on_enter(self, _):
-        if self.state_val == tk.NORMAL:
-            self.configure(
-                bg=self.hover_bg,
-                fg=self.hover_fg,
-                highlightbackground=self.hover_border_color
-            )
-
-    def _on_leave(self, _):
-        if self.state_val == tk.NORMAL:
-            self.configure(
-                bg=self.default_bg,
-                fg=self.default_fg,
-                highlightbackground=self.border_color
-            )
-
-    def _on_click(self, _):
-        if self.state_val == tk.NORMAL and self.command:
-            self.command()
-
-    def set_state(self, state: str):
+    def paintEvent(self, event):
         """
-        @brief Set button interactive state.
-        @param state Either tk.NORMAL or tk.DISABLED.
+        @brief Paint anti-aliased pill body and thumb circle with subpixel precision.
         """
-        self.state_val = state
-        if state == tk.DISABLED:
-            self.configure(cursor="arrow", fg=COLOR_TEXT_DIM, bg="#0d131f", highlightbackground="#162033")
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        h = float(self.height())
+        w = float(self.width())
+        r = h / 2.0
+
+        if not self._enabled:
+            bg = QColor("#162033")
+            border = QColor("#1e293b")
+            thumb = QColor("#475569")
+        elif self._checked:
+            bg = QColor(COLOR_EMERALD)
+            border = QColor(COLOR_EMERALD_BORDER)
+            thumb = QColor("#ffffff")
         else:
-            self.configure(cursor="hand2", fg=self.default_fg, bg=self.default_bg, highlightbackground=self.border_color)
+            bg = QColor("#1e293b")
+            border = QColor("#334155")
+            thumb = QColor("#94a3b8")
 
-    def set_theme(self, bg: str, hover_bg: str, fg=COLOR_TEXT_PRIMARY, border_color=None, hover_border_color=None, hover_fg=None):
-        """
-        @brief Reconfigure button theme dynamically.
-        """
-        self.default_bg = bg
-        self.hover_bg = hover_bg
-        self.default_fg = fg
-        self.hover_fg = hover_fg if hover_fg else fg
-        if border_color is not None:
-            self.border_color = border_color
-            self.configure(highlightbackground=border_color)
-        if hover_border_color is not None:
-            self.hover_border_color = hover_border_color
-        if self.state_val == tk.NORMAL:
-            self.configure(bg=bg, fg=fg)
+        p.setPen(QPen(border, 1.2))
+        p.setBrush(QBrush(bg))
+        p.drawRoundedRect(1, 1, int(w - 2), int(h - 2), r, r)
+
+        # Smooth thumb interpolation
+        pad = 3.0
+        tr = r - pad
+        x_left = pad + tr
+        x_right = w - pad - tr
+        cx = x_left + (x_right - x_left) * self._position
+        cy = r
+
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(thumb))
+        p.drawEllipse(int(cx - tr), int(cy - tr), int(tr * 2), int(tr * 2))
 
 
 # ------------------------------------------------------------------------------
-# Main Application Class
+# Clickable ComboBox with Double-Click Copy
 # ------------------------------------------------------------------------------
-class UARTShieldApp:
+class PortComboBox(QComboBox):
     """
-    @brief Ultra-compact modern minimalist control GUI for serial DTR/RTS reset shield.
+    @brief Custom ComboBox that copies active port path on double-click.
+    """
+    doubleClicked = pyqtSignal()
+
+    def mouseDoubleClickEvent(self, event):
+        self.doubleClicked.emit()
+        super().mouseDoubleClickEvent(event)
+
+
+# ------------------------------------------------------------------------------
+# Background Command Worker (Non-blocking pkexec integration)
+# ------------------------------------------------------------------------------
+class CommandWorker(QThread):
+    """
+    @brief Asynchronous worker to execute core script via pkexec without freezing GUI.
+    """
+    log_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, args: list, task_name: str):
+        super().__init__()
+        self.args = args
+        self.task_name = task_name
+
+    def run(self):
+        cmd = ["pkexec", CORE_SCRIPT] + self.args
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            for line in proc.stdout:
+                clean = ansi_escape.sub('', line.rstrip())
+                self.log_signal.emit(clean)
+
+            proc.wait()
+            rc = proc.returncode
+
+            if rc == 0:
+                self.log_signal.emit(f"[DONE] {self.task_name} succeeded.")
+                self.finished_signal.emit(True, f"✓ {self.task_name} succeeded.")
+            elif rc in (126, 127):
+                self.log_signal.emit(f"[CANCEL] {self.task_name} cancelled by user.")
+                self.finished_signal.emit(False, "Operation cancelled.")
+            else:
+                self.log_signal.emit(f"[FAIL] {self.task_name} failed (code: {rc}).")
+                self.finished_signal.emit(False, f"Failed (exit code {rc}).")
+        except Exception as e:
+            self.log_signal.emit(f"[ERROR] {e}")
+            self.finished_signal.emit(False, f"Error: {e}")
+
+
+# ------------------------------------------------------------------------------
+# Main Application Window
+# ------------------------------------------------------------------------------
+class UARTShieldApp(QWidget):
+    """
+    @brief Ultra-compact modern minimalist control widget for serial DTR/RTS reset shield.
     """
     WINDOW_WIDTH = 360
-    HEIGHT_COLLAPSED = 320
-    HEIGHT_EXPANDED = 470
+    HEIGHT_COLLAPSED = 315
+    HEIGHT_EXPANDED = 465
 
     SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-    def __init__(self, root: tk.Tk):
-        self.root = root
-        self.root.title("UART Shield")
-        self.root.configure(bg=COLOR_BG)
-        self.root.resizable(False, False)
-
-        # Center window on screen
-        self._center_window(self.WINDOW_WIDTH, self.HEIGHT_COLLAPSED)
-
-        # State tracking
+    def __init__(self):
+        super().__init__()
         self.devices = []
-        self.log_queue = queue.Queue()
         self.is_operating = False
         self.log_expanded = False
         self.current_protected = False
         self.current_param_exists = False
-        self.spinner_idx = 0
         self.active_task_label = ""
+        self.spinner_idx = 0
+        self.worker = None
 
-        self._init_theme()
+        self._setup_window()
         self._build_ui()
-        self._bind_shortcuts()
-        self._start_log_consumer()
+        self._setup_shortcuts()
 
-        # Initial device scan & auto refresh timer
+        # Timers
+        self.spinner_timer = QTimer(self)
+        self.spinner_timer.timeout.connect(self._step_spinner)
+
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.refresh_devices)
+        self.refresh_timer.start(3000)
+
         self.refresh_devices()
-        self._schedule_auto_refresh()
 
-    def _center_window(self, width: int, height: int):
+    def _setup_window(self):
         """
-        @brief Center window on primary monitor.
-        @param width Target window width in pixels.
-        @param height Target window height in pixels.
+        @brief Configure window title, geometry, and hardware styling.
         """
-        self.root.update_idletasks()
-        screen_w = self.root.winfo_screenwidth()
-        screen_h = self.root.winfo_screenheight()
-        x = max(0, (screen_w - width) // 2)
-        y = max(0, (screen_h - height) // 2)
-        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        self.setWindowTitle("UART Shield")
+        self.setFixedSize(self.WINDOW_WIDTH, self.HEIGHT_COLLAPSED)
+        self._center_on_screen()
 
-    def _init_theme(self):
-        """
-        @brief Initialize ttk styling for clean dark mode combobox with pixel-grid fonts.
-        """
-        self.root.option_add('*TCombobox*Listbox.background', COLOR_SURFACE)
-        self.root.option_add('*TCombobox*Listbox.foreground', COLOR_TEXT_PRIMARY)
-        self.root.option_add('*TCombobox*Listbox.selectBackground', COLOR_BLUE_BTN)
-        self.root.option_add('*TCombobox*Listbox.selectForeground', '#ffffff')
-        self.root.option_add('*TCombobox*Listbox.font', (FONT_UI, -13))
-        self.root.option_add('*TCombobox*Listbox.relief', tk.FLAT)
+        # Comprehensive Modern Dark QSS Theme
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #0b0f19;
+                color: #f8fafc;
+                font-family: 'SF Pro Display', 'Inter', 'Ubuntu', 'DejaVu Sans', sans-serif;
+            }
+            QFrame#card {
+                background-color: #131b2e;
+                border: 1px solid #25334d;
+                border-radius: 12px;
+            }
+            QComboBox {
+                background-color: #131b2e;
+                border: 1px solid #25334d;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 13px;
+                color: #f8fafc;
+            }
+            QComboBox:hover {
+                border: 1px solid #3b82f6;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #131b2e;
+                border: 1px solid #25334d;
+                border-radius: 8px;
+                selection-background-color: #2563eb;
+                selection-color: #ffffff;
+                color: #f8fafc;
+                padding: 4px;
+                outline: none;
+            }
+            QPushButton#btn_scan {
+                background-color: #192235;
+                color: #f8fafc;
+                border: 1px solid #25334d;
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton#btn_scan:hover {
+                background-color: #24314c;
+                border: 1px solid #3b82f6;
+            }
+            QPushButton#btn_patch {
+                background-color: #192235;
+                color: #f8fafc;
+                border: 1px solid #25334d;
+                border-radius: 7px;
+                padding: 8px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton#btn_patch:hover {
+                background-color: #24314c;
+                border: 1px solid #3b82f6;
+            }
+            QPushButton#btn_restore {
+                background-color: #192235;
+                color: #94a3b8;
+                border: 1px solid #25334d;
+                border-radius: 7px;
+                padding: 8px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton#btn_restore:hover {
+                background-color: #381313;
+                border: 1px solid #ef4444;
+                color: #fca5a5;
+            }
+            QPushButton#btn_install {
+                background-color: #2563eb;
+                color: #ffffff;
+                border: none;
+                border-radius: 7px;
+                padding: 8px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton#btn_install:hover {
+                background-color: #3b82f6;
+            }
+            QPlainTextEdit {
+                background-color: #060911;
+                color: #94a3b8;
+                border: 1px solid #1e293b;
+                border-radius: 8px;
+                padding: 6px;
+                font-family: 'SF Mono', 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+                font-size: 11px;
+            }
+        """)
 
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure(
-            "Compact.TCombobox",
-            fieldbackground=COLOR_SURFACE,
-            background=COLOR_BTN_SECONDARY,
-            foreground=COLOR_TEXT_PRIMARY,
-            darkcolor=COLOR_BORDER,
-            lightcolor=COLOR_BORDER,
-            arrowcolor=COLOR_TEXT_MUTED,
-            bordercolor=COLOR_BORDER,
-            padding=5
-        )
-        style.map(
-            "Compact.TCombobox",
-            fieldbackground=[("readonly", COLOR_SURFACE)],
-            selectbackground=[("readonly", COLOR_SURFACE)],
-            selectforeground=[("readonly", COLOR_TEXT_PRIMARY)]
-        )
+    def _center_on_screen(self):
+        """
+        @brief Center window on the active screen.
+        """
+        screen = QApplication.primaryScreen()
+        if screen:
+            geo = screen.availableGeometry()
+            x = max(0, (geo.width() - self.WINDOW_WIDTH) // 2)
+            y = max(0, (geo.height() - self.HEIGHT_COLLAPSED) // 2)
+            self.move(x, y)
 
-    def _bind_shortcuts(self):
+    def _setup_shortcuts(self):
         """
-        @brief Register keyboard shortcuts for fast power-user access.
+        @brief Bind keyboard shortcuts for power-users.
         """
-        self.root.bind("<space>", lambda _: self._on_space_pressed())
-        self.root.bind("<Control-r>", lambda _: self.refresh_devices())
-        self.root.bind("<Control-R>", lambda _: self.refresh_devices())
-        self.root.bind("<F5>", lambda _: self.refresh_devices())
-        self.root.bind("<Control-l>", lambda _: self._toggle_log_drawer())
-        self.root.bind("<Control-L>", lambda _: self._toggle_log_drawer())
-        self.root.bind("<Escape>", lambda _: self.root.destroy())
+        QShortcut(QKeySequence(Qt.Key.Key_Space), self, self._on_space_pressed)
+        QShortcut(QKeySequence("Ctrl+R"), self, self.refresh_devices)
+        QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.refresh_devices)
+        QShortcut(QKeySequence("Ctrl+L"), self, self._toggle_log_drawer)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.close)
 
     def _build_ui(self):
         """
-        @brief Construct ultra-compact minimalist interface.
+        @brief Construct layout with hardware-accelerated widgets.
         """
-        self.main_container = tk.Frame(self.root, bg=COLOR_BG, padx=14, pady=12)
-        self.main_container.pack(fill=tk.BOTH, expand=True)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(14, 14, 14, 12)
+        root_layout.setSpacing(8)
 
-        # 1. Header Row (App Title + Kernel Pill + Refresh Button)
-        header_row = tk.Frame(self.main_container, bg=COLOR_BG)
-        header_row.pack(fill=tk.X, pady=(0, 8))
+        # 1. Header Row (Title + Badge + Scan Button)
+        hdr = QHBoxLayout()
+        hdr.setSpacing(8)
 
-        lbl_title = tk.Label(
-            header_row,
-            text="UART Shield",
-            font=(FONT_UI, -15, "bold"),
-            fg=COLOR_TEXT_PRIMARY,
-            bg=COLOR_BG
+        lbl_title = QLabel("UART Shield")
+        lbl_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #f8fafc;")
+        hdr.addWidget(lbl_title)
+
+        lbl_kernel = QLabel("KERNEL")
+        lbl_kernel.setStyleSheet(
+            "background: #162033; color: #94a3b8; font-size: 10px; font-weight: bold; "
+            "border-radius: 4px; padding: 2px 6px; font-family: monospace;"
         )
-        lbl_title.pack(side=tk.LEFT)
+        hdr.addWidget(lbl_kernel)
+        hdr.addStretch()
 
-        lbl_badge = tk.Label(
-            header_row,
-            text="KERNEL",
-            font=(FONT_MONO, -10, "bold"),
-            fg=COLOR_TEXT_MUTED,
-            bg="#162033",
-            padx=6,
-            pady=2
+        self.btn_scan = QPushButton("↻ Scan")
+        self.btn_scan.setObjectName("btn_scan")
+        self.btn_scan.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_scan.clicked.connect(self.refresh_devices)
+        hdr.addWidget(self.btn_scan)
+        root_layout.addLayout(hdr)
+
+        # 2. Port Selector Dropdown
+        self.combo_ports = PortComboBox()
+        self.combo_ports.currentIndexChanged.connect(self._on_device_selected)
+        self.combo_ports.doubleClicked.connect(self._copy_port_to_clipboard)
+        root_layout.addWidget(self.combo_ports)
+
+        # 2b. Port In-Use Warning Chip (Hidden by default)
+        self.port_warning = QFrame()
+        self.port_warning.setStyleSheet(
+            "background-color: #381f08; border: 1px solid #b45309; border-radius: 6px; padding: 3px 6px;"
         )
-        lbl_badge.pack(side=tk.LEFT, padx=(8, 0))
+        pw_layout = QHBoxLayout(self.port_warning)
+        pw_layout.setContentsMargins(4, 2, 4, 2)
+        self.lbl_port_warning = QLabel("⚠ Port in use")
+        self.lbl_port_warning.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: bold; background: transparent; border: none;")
+        pw_layout.addWidget(self.lbl_port_warning)
+        self.port_warning.hide()
+        root_layout.addWidget(self.port_warning)
 
-        self.btn_refresh = FlatButton(
-            header_row,
-            text="↻ Scan",
-            command=self.refresh_devices,
-            font=(FONT_UI, -12, "bold"),
-            padx=8,
-            pady=3,
-            border_color=COLOR_BORDER
+        # 3. Hero Status Card (Houses Status Pill + Switch + Desc + Optional Install CTA)
+        self.card = QFrame()
+        self.card.setObjectName("card")
+        card_layout = QVBoxLayout(self.card)
+        card_layout.setContentsMargins(12, 12, 12, 12)
+        card_layout.setSpacing(6)
+
+        # Card Top Row: Status Pill (Left) + Animated Switch (Right)
+        card_top = QHBoxLayout()
+        self.lbl_pill = QLabel("Checking")
+        self.lbl_pill.setStyleSheet(
+            "background: #1a2336; color: #94a3b8; border: 1px solid #2e3d5b; "
+            "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
         )
-        self.btn_refresh.pack(side=tk.RIGHT)
+        card_top.addWidget(self.lbl_pill)
+        card_top.addStretch()
 
-        # 2. Port Selector Dropdown Row
-        port_row = tk.Frame(self.main_container, bg=COLOR_BG)
-        port_row.pack(fill=tk.X, pady=(0, 6))
+        self.switch = AnimatedToggle()
+        self.switch.toggled.connect(self._on_switch_toggled)
+        card_top.addWidget(self.switch)
+        card_layout.addLayout(card_top)
 
-        self.combo_ports = ttk.Combobox(
-            port_row,
-            state="readonly",
-            font=(FONT_UI, -13),
-            style="Compact.TCombobox"
-        )
-        self.combo_ports.pack(fill=tk.X, ipady=4)
-        self.combo_ports.bind("<<ComboboxSelected>>", self._on_device_selected)
-        self.combo_ports.bind("<Double-Button-1>", lambda _: self._copy_port_to_clipboard())
+        # Subtitle description
+        self.lbl_desc = QLabel("Checking serial DTR/RTS pin state...")
+        self.lbl_desc.setStyleSheet("color: #94a3b8; font-size: 12px; background: transparent; border: none;")
+        card_layout.addWidget(self.lbl_desc)
 
-        # 2b. Port In-Use Warning Chip (Hidden by default, shown if process locks port)
-        self.port_warning_frame = tk.Frame(
-            self.main_container,
-            bg=COLOR_AMBER_BG,
-            highlightthickness=1,
-            highlightbackground=COLOR_AMBER_BORDER,
-            padx=8,
-            pady=3
-        )
-        self.lbl_port_warning = tk.Label(
-            self.port_warning_frame,
-            text="⚠ Port in use",
-            font=(FONT_UI, -11, "bold"),
-            fg=COLOR_AMBER,
-            bg=COLOR_AMBER_BG
-        )
-        self.lbl_port_warning.pack(side=tk.LEFT)
+        # Prominent Install Button (Only visible if Stock Driver)
+        self.btn_install = QPushButton("Install Kernel Shield")
+        self.btn_install.setObjectName("btn_install")
+        self.btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_install.clicked.connect(self.patch_driver)
+        self.btn_install.hide()
+        card_layout.addWidget(self.btn_install)
 
-        # 3. Hero Status & Interactive Switch Card
-        self.card = tk.Frame(
-            self.main_container,
-            bg=COLOR_SURFACE,
-            highlightthickness=1,
-            highlightbackground=COLOR_BORDER,
-            padx=12,
-            pady=12
-        )
-        self.card.pack(fill=tk.X, pady=(4, 10))
+        root_layout.addWidget(self.card)
 
-        # Status Line: Glowing Status Pill (Left) + Modern Switch (Right)
-        status_line = tk.Frame(self.card, bg=COLOR_SURFACE)
-        status_line.pack(fill=tk.X, pady=(0, 6))
+        # 4. Secondary Action Row (Rebuild Patch / Restore Stock)
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
 
-        # Status Pill Badge
-        self.status_pill = tk.Frame(
-            status_line,
-            bg=COLOR_AMBER_BG,
-            highlightthickness=1,
-            highlightbackground=COLOR_AMBER_BORDER,
-            padx=8,
-            pady=3
-        )
-        self.status_pill.pack(side=tk.LEFT)
+        self.btn_patch = QPushButton("Rebuild Patch")
+        self.btn_patch.setObjectName("btn_patch")
+        self.btn_patch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_patch.clicked.connect(self.patch_driver)
+        actions.addWidget(self.btn_patch)
 
-        self.lbl_status = tk.Label(
-            self.status_pill,
-            text="Checking",
-            font=(FONT_UI, -12, "bold"),
-            fg=COLOR_AMBER,
-            bg=COLOR_AMBER_BG
-        )
-        self.lbl_status.pack()
+        self.btn_restore = QPushButton("Restore Stock")
+        self.btn_restore.setObjectName("btn_restore")
+        self.btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_restore.clicked.connect(self.restore_driver)
+        actions.addWidget(self.btn_restore)
+        root_layout.addLayout(actions)
 
-        # Modern Interactive Toggle Switch
-        self.switch = ModernSwitch(
-            status_line,
-            state=False,
-            command=self._on_switch_toggled,
-            width=46,
-            height=24,
-            bg_card=COLOR_SURFACE
-        )
-        self.switch.pack(side=tk.RIGHT)
+        # 5. Activity Log Drawer (Collapsible)
+        self.txt_log = QPlainTextEdit()
+        self.txt_log.setReadOnly(True)
+        self.txt_log.hide()
+        root_layout.addWidget(self.txt_log)
 
-        # Description text
-        self.lbl_desc = tk.Label(
-            self.card,
-            text="Checking serial DTR/RTS pin state...",
-            font=(FONT_UI, -12),
-            fg=COLOR_TEXT_MUTED,
-            bg=COLOR_SURFACE,
-            anchor=tk.W
-        )
-        self.lbl_desc.pack(fill=tk.X, pady=(2, 0))
+        # 6. Footer Row (Status / Spinner + Log Toggle + Clear)
+        ftr = QHBoxLayout()
+        self.lbl_footer = QLabel("Ready • Space to toggle")
+        self.lbl_footer.setStyleSheet("color: #64748b; font-size: 11px;")
+        ftr.addWidget(self.lbl_footer)
+        ftr.addStretch()
 
-        # CTA Button inside Card (Only shown if Stock Driver requires install)
-        self.btn_stock_install = FlatButton(
-            self.card,
-            text="Install Kernel Shield",
-            command=self.patch_driver,
-            bg=COLOR_BLUE_BTN,
-            hover_bg=COLOR_BLUE_BTN_HOVER,
-            fg="#ffffff",
-            font=(FONT_UI, -13, "bold"),
-            pady=7,
-            border_color=None
-        )
+        self.btn_clear = QPushButton("Clear")
+        self.btn_clear.setStyleSheet("background: transparent; color: #64748b; font-size: 11px; border: none;")
+        self.btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_clear.clicked.connect(self.txt_log.clear)
+        self.btn_clear.hide()
+        ftr.addWidget(self.btn_clear)
 
-        # 4. Secondary Operations Row (Patch / Restore buttons)
-        actions_row = tk.Frame(self.main_container, bg=COLOR_BG)
-        actions_row.pack(fill=tk.X, pady=(0, 8))
+        self.btn_log = QPushButton("Log ▸")
+        self.btn_log.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px; font-weight: bold; border: none;")
+        self.btn_log.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_log.clicked.connect(self._toggle_log_drawer)
+        ftr.addWidget(self.btn_log)
 
-        self.btn_patch = FlatButton(
-            actions_row,
-            text="Patch Driver",
-            command=self.patch_driver,
-            font=(FONT_UI, -13, "bold"),
-            padx=6,
-            pady=6,
-            border_color=COLOR_BORDER
-        )
-        self.btn_patch.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
-
-        # Danger hover for Restore Stock to prevent accidental clicks
-        self.btn_restore = FlatButton(
-            actions_row,
-            text="Restore Stock",
-            command=self.restore_driver,
-            font=(FONT_UI, -13, "bold"),
-            padx=6,
-            pady=6,
-            bg=COLOR_BTN_SECONDARY,
-            hover_bg=COLOR_RED_BG,
-            fg=COLOR_TEXT_MUTED,
-            hover_fg=COLOR_RED_TEXT,
-            border_color=COLOR_BORDER,
-            hover_border_color=COLOR_RED
-        )
-        self.btn_restore.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
-
-        # 5. Footer Row (Mini Status + Log Controls)
-        footer_row = tk.Frame(self.main_container, bg=COLOR_BG)
-        footer_row.pack(fill=tk.X, side=tk.BOTTOM)
-
-        self.lbl_footer = tk.Label(
-            footer_row,
-            text="Ready • Space to toggle",
-            font=(FONT_UI, -11),
-            fg=COLOR_TEXT_DIM,
-            bg=COLOR_BG,
-            anchor=tk.W
-        )
-        self.lbl_footer.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        self.btn_clear = tk.Label(
-            footer_row,
-            text="Clear",
-            font=(FONT_UI, -11),
-            fg=COLOR_TEXT_DIM,
-            bg=COLOR_BG,
-            cursor="hand2"
-        )
-        self.btn_clear.bind("<Button-1>", lambda _: self._clear_log())
-
-        self.btn_log_toggle = tk.Label(
-            footer_row,
-            text="Log ▸",
-            font=(FONT_UI, -12, "bold"),
-            fg=COLOR_TEXT_MUTED,
-            bg=COLOR_BG,
-            cursor="hand2"
-        )
-        self.btn_log_toggle.pack(side=tk.RIGHT)
-        self.btn_log_toggle.bind("<Button-1>", lambda _: self._toggle_log_drawer())
-
-        # 6. Collapsible Log Drawer (Hidden by default)
-        self.log_container = tk.Frame(
-            self.main_container,
-            bg=COLOR_SURFACE,
-            highlightthickness=1,
-            highlightbackground=COLOR_BORDER
-        )
-
-        self.txt_log = tk.Text(
-            self.log_container,
-            height=7,
-            wrap=tk.WORD,
-            font=(FONT_MONO, -12),
-            bg="#060911",
-            fg=COLOR_TEXT_MUTED,
-            insertbackground="white",
-            relief=tk.FLAT,
-            padx=8,
-            pady=6
-        )
-        self.txt_log.pack(fill=tk.BOTH, expand=True)
+        root_layout.addLayout(ftr)
 
     def _copy_port_to_clipboard(self):
         """
@@ -616,100 +524,88 @@ class UARTShieldApp:
         """
         port = self._get_current_port()
         if port:
-            self.root.clipboard_clear()
-            self.root.clipboard_append(port)
+            clipboard = QApplication.clipboard()
+            clipboard.setText(port)
             self._flash_footer(f"Copied {port} to clipboard!")
 
     def _flash_footer(self, message: str, delay_ms: int = 2500):
         """
-        @brief Temporarily display a toast message in the footer bar.
+        @brief Temporarily display toast message in the footer bar.
         @param message Text to display.
-        @param delay_ms Milliseconds before resetting to default status.
+        @param delay_ms Duration in milliseconds.
         """
-        self.lbl_footer.config(text=message, fg=COLOR_EMERALD)
-        self.root.after(delay_ms, lambda: self.lbl_footer.config(text="Ready • Space to toggle", fg=COLOR_TEXT_DIM))
+        self.lbl_footer.setText(message)
+        self.lbl_footer.setStyleSheet("color: #10b981; font-size: 11px; font-weight: bold;")
+        QTimer.singleShot(delay_ms, lambda: (
+            self.lbl_footer.setText("Ready • Space to toggle"),
+            self.lbl_footer.setStyleSheet("color: #64748b; font-size: 11px;")
+        ))
 
     def _on_space_pressed(self):
         """
-        @brief Handle Spacebar press to toggle switch if active.
+        @brief Handle Space key press to toggle switch.
         """
-        if not self.is_operating and self.switch.enabled:
-            new_state = not self.switch.state
-            self.switch.set_state(new_state)
+        if not self.is_operating and self.switch._enabled:
+            new_state = not self.switch.isChecked()
+            self.switch.setChecked(new_state, animated=True)
             self._on_switch_toggled(new_state)
 
     def _toggle_log_drawer(self):
         """
-        @brief Toggle collapsible mini activity log drawer and adjust window height.
+        @brief Toggle collapsible activity log drawer and adjust window height.
         """
         self.log_expanded = not self.log_expanded
         if self.log_expanded:
-            self.btn_log_toggle.configure(text="Log ▾", fg=COLOR_TEXT_PRIMARY)
-            self.btn_clear.pack(side=tk.RIGHT, padx=(0, 8))
-            self.log_container.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
-            self.root.geometry(f"{self.WINDOW_WIDTH}x{self.HEIGHT_EXPANDED}")
+            self.btn_log.setText("Log ▾")
+            self.btn_clear.show()
+            self.txt_log.show()
+            self.setFixedHeight(self.HEIGHT_EXPANDED)
         else:
-            self.btn_log_toggle.configure(text="Log ▸", fg=COLOR_TEXT_MUTED)
-            self.btn_clear.pack_forget()
-            self.log_container.pack_forget()
-            self.root.geometry(f"{self.WINDOW_WIDTH}x{self.HEIGHT_COLLAPSED}")
-
-    def _clear_log(self):
-        """
-        @brief Clear output text in the activity log drawer.
-        """
-        self.txt_log.delete("1.0", tk.END)
+            self.btn_log.setText("Log ▸")
+            self.btn_clear.hide()
+            self.txt_log.hide()
+            self.setFixedHeight(self.HEIGHT_COLLAPSED)
 
     def log(self, message: str):
         """
-        @brief Append a message to the asynchronous log queue.
-        @param message Text to display.
+        @brief Append message to activity log.
+        @param message Text string.
         """
-        self.log_queue.put(message)
+        self.txt_log.appendPlainText(message)
 
-    def _start_log_consumer(self):
+    def set_operating(self, operating: bool, task_name: str = ""):
         """
-        @brief Background poll of log queue to update GUI text safely on main thread.
-        """
-        def check():
-            while not self.log_queue.empty():
-                msg = self.log_queue.get_nowait()
-                self.txt_log.insert(tk.END, msg + "\n")
-                self.txt_log.see(tk.END)
-            self.root.after(100, check)
-        self.root.after(100, check)
-
-    def set_operating(self, operating: bool, status_msg: str = ""):
-        """
-        @brief Enable or disable controls during an active operation and run spinner.
-        @param operating True if busy running a command.
-        @param status_msg Status bar description.
+        @brief Set UI controls busy/interactive state.
+        @param operating True if busy running a background command.
+        @param task_name Label for spinner.
         """
         self.is_operating = operating
-        state = tk.DISABLED if operating else tk.NORMAL
+        self.active_task_label = task_name
 
-        self.btn_refresh.set_state(state)
-        self.btn_patch.set_state(state)
-        self.btn_restore.set_state(state)
-        self.btn_stock_install.set_state(state)
-        self.switch.set_enabled(not operating and self.current_param_exists)
-        self.combo_ports.config(state="readonly" if not operating else tk.DISABLED)
+        self.btn_scan.setEnabled(not operating)
+        self.btn_patch.setEnabled(not operating)
+        self.btn_restore.setEnabled(not operating)
+        self.btn_install.setEnabled(not operating)
+        self.combo_ports.setEnabled(not operating)
+        self.switch.setEnabled(not operating and self.current_param_exists)
 
-        self.active_task_label = status_msg
         if operating:
-            self._animate_spinner()
+            self.spinner_idx = 0
+            self.spinner_timer.start(100)
         else:
-            self.lbl_footer.config(text=status_msg if status_msg else "Ready • Space to toggle", fg=COLOR_TEXT_DIM)
+            self.spinner_timer.stop()
+            self.lbl_footer.setText(task_name if task_name else "Ready • Space to toggle")
+            self.lbl_footer.setStyleSheet("color: #64748b; font-size: 11px;")
 
-    def _animate_spinner(self):
+    def _step_spinner(self):
         """
-        @brief Animate spinner in footer while an operation is active.
+        @brief Cycle ASCII spinner frame in footer.
         """
         if self.is_operating:
             frame = self.SPINNER_FRAMES[self.spinner_idx % len(self.SPINNER_FRAMES)]
             self.spinner_idx += 1
-            self.lbl_footer.config(text=f"{frame} {self.active_task_label}", fg=COLOR_BLUE_BTN_HOVER)
-            self.root.after(100, self._animate_spinner)
+            self.lbl_footer.setText(f"{frame} {self.active_task_label}...")
+            self.lbl_footer.setStyleSheet(f"color: {COLOR_BLUE_HOVER}; font-size: 11px; font-weight: bold;")
 
     # --------------------------------------------------------------------------
     # Device Scanning & State Resolution
@@ -717,7 +613,7 @@ class UARTShieldApp:
 
     def refresh_devices(self):
         """
-        @brief Scan available serial ports, check process locks, and query driver parameters.
+        @brief Scan available serial ports and query driver parameters.
         """
         if self.is_operating:
             return
@@ -742,18 +638,24 @@ class UARTShieldApp:
         except Exception as e:
             self.log(f"Error scanning ports: {e}")
 
+        # Populate combobox
+        current_selection = self.combo_ports.currentText()
+        self.combo_ports.blockSignals(True)
+        self.combo_ports.clear()
+
         values = [f"{d['port']} ({d['driver']})" for d in self.devices]
-        current_selection = self.combo_ports.get()
-        self.combo_ports["values"] = values
+        self.combo_ports.addItems(values)
 
         if values:
             if current_selection in values:
-                self.combo_ports.set(current_selection)
+                self.combo_ports.setCurrentText(current_selection)
             else:
-                self.combo_ports.current(0)
+                self.combo_ports.setCurrentIndex(0)
+            self.combo_ports.blockSignals(False)
             self._update_selected_info()
         else:
-            self.combo_ports.set("No serial ports detected")
+            self.combo_ports.addItem("No serial ports detected")
+            self.combo_ports.blockSignals(False)
             self._set_no_device_state()
 
     def _check_port_lock(self, port_path: str):
@@ -782,14 +684,14 @@ class UARTShieldApp:
             pass
         return None, None
 
-    def _on_device_selected(self, _=None):
+    def _on_device_selected(self):
         self._update_selected_info()
 
     def _update_selected_info(self):
         """
         @brief Refresh status badge, toggle switch, and port lock warning.
         """
-        idx = self.combo_ports.current()
+        idx = self.combo_ports.currentIndex()
         if idx < 0 or idx >= len(self.devices):
             return
 
@@ -797,15 +699,15 @@ class UARTShieldApp:
         driver = dev["driver"]
         port = dev["port"]
 
-        # 1. Check if process is locking port
+        # Check process lock
         lock_pid, lock_name = self._check_port_lock(port)
         if lock_pid:
-            self.lbl_port_warning.configure(text=f"⚠ Port in use: {lock_name} (PID {lock_pid})")
-            self.port_warning_frame.pack(fill=tk.X, pady=(0, 6), before=self.card)
+            self.lbl_port_warning.setText(f"⚠ Port in use: {lock_name} (PID {lock_pid})")
+            self.port_warning.show()
         else:
-            self.port_warning_frame.pack_forget()
+            self.port_warning.hide()
 
-        # 2. Check kernel module parameter
+        # Check kernel module parameter
         param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts"
 
         if os.path.isfile(param_file):
@@ -816,50 +718,56 @@ class UARTShieldApp:
                 if val in ("Y", "1"):
                     # Shield Active
                     self.current_protected = True
-                    self._set_pill_style(text="● Shield Active", fg=COLOR_EMERALD, bg=COLOR_EMERALD_BG, border=COLOR_EMERALD_BORDER)
-                    self.lbl_desc.configure(text="Hardware resets blocked (DTR held HIGH)")
-                    self.switch.set_state(True)
-                    self.switch.set_enabled(True)
+                    self.lbl_pill.setText("● Shield Active")
+                    self.lbl_pill.setStyleSheet(
+                        f"background: {COLOR_EMERALD_BG}; color: {COLOR_EMERALD}; "
+                        f"border: 1px solid {COLOR_EMERALD_BORDER}; border-radius: 10px; "
+                        "padding: 3px 10px; font-size: 11px; font-weight: bold;"
+                    )
+                    self.lbl_desc.setText("Hardware resets blocked (DTR held HIGH)")
+                    self.switch.setChecked(True)
+                    self.switch.setEnabled(True)
                 else:
                     # Shield Inactive
                     self.current_protected = False
-                    self._set_pill_style(text="○ Shield Inactive", fg=COLOR_AMBER, bg=COLOR_AMBER_BG, border=COLOR_AMBER_BORDER)
-                    self.lbl_desc.configure(text="Default Linux mode (DTR asserts on connect)")
-                    self.switch.set_state(False)
-                    self.switch.set_enabled(True)
+                    self.lbl_pill.setText("○ Shield Inactive")
+                    self.lbl_pill.setStyleSheet(
+                        f"background: {COLOR_AMBER_BG}; color: {COLOR_AMBER}; "
+                        f"border: 1px solid {COLOR_AMBER_BORDER}; border-radius: 10px; "
+                        "padding: 3px 10px; font-size: 11px; font-weight: bold;"
+                    )
+                    self.lbl_desc.setText("Default Linux mode (DTR asserts on connect)")
+                    self.switch.setChecked(False)
+                    self.switch.setEnabled(True)
 
-                self.btn_stock_install.pack_forget()
-                self.btn_patch.configure(text="Rebuild Patch")
+                self.btn_install.hide()
+                self.btn_patch.setText("Rebuild Patch")
             except Exception:
                 self._set_stock_state(driver)
         else:
             self._set_stock_state(driver)
 
-        self.btn_patch.set_state(tk.NORMAL)
-        self.btn_restore.set_state(tk.NORMAL)
-
-    def _set_pill_style(self, text: str, fg: str, bg: str, border: str):
-        """
-        @brief Update glowing status pill label and container.
-        """
-        self.status_pill.configure(bg=bg, highlightbackground=border)
-        self.lbl_status.configure(text=text, fg=fg, bg=bg)
+        self.btn_patch.setEnabled(True)
+        self.btn_restore.setEnabled(True)
 
     def _set_stock_state(self, driver: str):
         """
         @brief Update UI when stock (unpatched) driver is in use.
-        @param driver Driver module name (e.g. cp210x).
+        @param driver Driver module name.
         """
         self.current_param_exists = False
         self.current_protected = False
-        self._set_pill_style(text="△ Stock Driver", fg=COLOR_TEXT_MUTED, bg="#1a2336", border="#2e3d5b")
-        self.lbl_desc.configure(text=f"'{driver}' unpatched. Install shield to block resets.")
-        self.switch.set_state(False)
-        self.switch.set_enabled(False)
+        self.lbl_pill.setText("△ Stock Driver")
+        self.lbl_pill.setStyleSheet(
+            "background: #1a2336; color: #94a3b8; border: 1px solid #2e3d5b; "
+            "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
+        )
+        self.lbl_desc.setText(f"'{driver}' unpatched. Install shield to block resets.")
+        self.switch.setChecked(False, animated=False)
+        self.switch.setEnabled(False)
 
-        # Show prominent install button inside card
-        self.btn_stock_install.pack(fill=tk.X, pady=(10, 0))
-        self.btn_patch.configure(text="Patch Driver")
+        self.btn_install.show()
+        self.btn_patch.setText("Patch Driver")
 
     def _set_no_device_state(self):
         """
@@ -867,38 +775,27 @@ class UARTShieldApp:
         """
         self.current_param_exists = False
         self.current_protected = False
-        self.port_warning_frame.pack_forget()
-        self._set_pill_style(text="No Device", fg=COLOR_TEXT_DIM, bg="#131926", border="#1e293b")
-        self.lbl_desc.configure(text="Connect a USB-UART adapter or gimbal.")
-        self.switch.set_state(False)
-        self.switch.set_enabled(False)
-        self.btn_stock_install.pack_forget()
-        self.btn_patch.set_state(tk.DISABLED)
-        self.btn_restore.set_state(tk.DISABLED)
-
-    def _schedule_auto_refresh(self):
-        """
-        @brief Periodically poll devices every 3 seconds if not operating.
-        """
-        if not self.is_operating:
-            self.refresh_devices()
-        self.root.after(3000, self._schedule_auto_refresh)
+        self.port_warning.hide()
+        self.lbl_pill.setText("No Device")
+        self.lbl_pill.setStyleSheet(
+            "background: #131926; color: #64748b; border: 1px solid #1e293b; "
+            "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
+        )
+        self.lbl_desc.setText("Connect a USB-UART adapter or gimbal.")
+        self.switch.setChecked(False, animated=False)
+        self.switch.setEnabled(False)
+        self.btn_install.hide()
+        self.btn_patch.setEnabled(False)
+        self.btn_restore.setEnabled(False)
 
     def _get_current_driver(self) -> str:
-        """
-        @brief Retrieve driver module name for currently selected device.
-        @return Driver module string (defaults to cp210x).
-        """
-        idx = self.combo_ports.current()
+        idx = self.combo_ports.currentIndex()
         if idx >= 0 and idx < len(self.devices):
             return self.devices[idx]["driver"]
         return "cp210x"
 
     def _get_current_port(self) -> str:
-        """
-        @brief Retrieve serial port path (e.g. /dev/ttyUSB0).
-        """
-        idx = self.combo_ports.current()
+        idx = self.combo_ports.currentIndex()
         if idx >= 0 and idx < len(self.devices):
             return self.devices[idx]["port"]
         return ""
@@ -907,73 +804,34 @@ class UARTShieldApp:
     # Asynchronous Execution via Core Script
     # --------------------------------------------------------------------------
 
-    def _run_core_command(self, args: list, task_name: str, on_complete=None):
+    def _run_core_command(self, args: list, task_name: str):
         """
-        @brief Run uart_kernel_patch.sh asynchronously via pkexec.
+        @brief Launch background worker to execute script via pkexec.
         @param args CLI arguments.
         @param task_name Display label.
-        @param on_complete Optional callback upon completion.
         """
         if self.is_operating:
             return
 
-        # Auto-expand log on operations so user sees progress
         if not self.log_expanded:
             self._toggle_log_drawer()
 
         self.set_operating(True, task_name)
         self.log(f"\n[ACTION] {task_name}")
 
-        def worker():
-            cmd = ["pkexec", CORE_SCRIPT] + args
-            try:
-                proc = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1
-                )
+        self.worker = CommandWorker(args, task_name)
+        self.worker.log_signal.connect(self.log)
+        self.worker.finished_signal.connect(self._on_command_finished)
+        self.worker.start()
 
-                for line in proc.stdout:
-                    clean = self._strip_ansi(line.rstrip())
-                    self.log(clean)
-
-                proc.wait()
-                rc = proc.returncode
-
-                if rc == 0:
-                    self.log(f"[DONE] {task_name} succeeded.")
-                    msg = f"✓ {task_name} succeeded."
-                elif rc in (126, 127):
-                    self.log(f"[CANCEL] {task_name} cancelled by user.")
-                    msg = "Operation cancelled."
-                else:
-                    self.log(f"[FAIL] {task_name} failed (exit code: {rc}).")
-                    msg = f"Failed (exit code {rc})."
-
-            except Exception as e:
-                self.log(f"[ERROR] {e}")
-                msg = f"Error: {e}"
-
-            def finish():
-                self.set_operating(False, msg)
-                self.refresh_devices()
-                if on_complete:
-                    on_complete()
-
-            self.root.after(0, finish)
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _strip_ansi(self, text: str) -> str:
+    def _on_command_finished(self, success: bool, msg: str):
         """
-        @brief Strip terminal ANSI color escape codes from string.
-        @param text Raw string.
-        @return Cleaned plain string.
+        @brief Handle background command completion.
+        @param success True if return code was 0.
+        @param msg Status description.
         """
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        return ansi_escape.sub('', text)
+        self.set_operating(False, msg)
+        self.refresh_devices()
 
     # --------------------------------------------------------------------------
     # Action Handlers
@@ -981,8 +839,8 @@ class UARTShieldApp:
 
     def _on_switch_toggled(self, new_state: bool):
         """
-        @brief Handle user toggling the Modern Switch.
-        @param new_state True for Shield ON, False for Shield OFF.
+        @brief Handle switch toggle event.
+        @param new_state True for ON, False for OFF.
         """
         driver = self._get_current_driver()
         param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts"
@@ -999,13 +857,15 @@ class UARTShieldApp:
         @brief Trigger driver patch installation.
         """
         driver = self._get_current_driver()
-        confirm = messagebox.askyesno(
+        confirm = QMessageBox.question(
+            self,
             "Install Patch",
             f"Build and install DTR/RTS reset shield for '{driver}'?\n\n"
             "This will download, patch, and install the kernel driver module.",
-            parent=self.root
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
         )
-        if not confirm:
+        if confirm != QMessageBox.StandardButton.Yes:
             return
 
         self._run_core_command(["patch", driver, "-y"], f"Patching {driver}")
@@ -1015,13 +875,15 @@ class UARTShieldApp:
         @brief Trigger driver restore to stock Ubuntu version.
         """
         driver = self._get_current_driver()
-        confirm = messagebox.askyesno(
+        confirm = QMessageBox.question(
+            self,
             "Restore Stock Driver",
             f"Restore original factory driver for '{driver}'?\n\n"
             "Warning: This will remove reset protection and restore standard Ubuntu DTR/RTS behavior.",
-            parent=self.root
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
         )
-        if not confirm:
+        if confirm != QMessageBox.StandardButton.Yes:
             return
 
         self._run_core_command(["restore", driver, "-y"], f"Restoring {driver}")
@@ -1032,9 +894,13 @@ def main():
         print(f"Error: Missing core script: {CORE_SCRIPT}")
         sys.exit(1)
 
-    root = tk.Tk()
-    app = UARTShieldApp(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+
+    window = UARTShieldApp()
+    window.show()
+
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
