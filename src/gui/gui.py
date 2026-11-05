@@ -14,10 +14,43 @@ import threading
 import queue
 import re
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk, messagebox
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
+
+# ------------------------------------------------------------------------------
+# Typography & Dynamic Font Resolution
+# ------------------------------------------------------------------------------
+def resolve_best_font(preferred_list: list, fallback: str = "sans-serif") -> str:
+    """
+    @brief Resolve the highest priority font available on the host system.
+    @param preferred_list List of preferred font names.
+    @param fallback Safe fallback name.
+    @return Verified font family name.
+    """
+    try:
+        available = set(tkfont.families())
+        for name in preferred_list:
+            if name in available:
+                return name
+    except Exception:
+        pass
+    return fallback
+
+
+# Primary UI font (Open geometric sans with high x-height for readability)
+FONT_UI = resolve_best_font(
+    ["Google Sans", "SF Pro Display", "Ubuntu", "Inter", "DejaVu Sans"],
+    "sans-serif"
+)
+
+# Monospace font for technical logs and hardware tags
+FONT_MONO = resolve_best_font(
+    ["SF Mono", "Fira Code", "JetBrains Mono", "DejaVu Sans Mono"],
+    "monospace"
+)
 
 # ------------------------------------------------------------------------------
 # Modern Minimalist Palette (Tailwind Slate / Zinc inspired)
@@ -30,7 +63,7 @@ COLOR_BORDER_FOCUS = "#3b82f6" # Focus border
 
 COLOR_TEXT_PRIMARY = "#f8fafc" # Crisp white
 COLOR_TEXT_MUTED = "#94a3b8"   # Slate 400
-COLOR_TEXT_DIM = "#475569"     # Slate 600
+COLOR_TEXT_DIM = "#64748b"     # Slate 500
 
 COLOR_EMERALD = "#10b981"      # Emerald 500 (Protected active)
 COLOR_EMERALD_BG = "#064e3b"   # Emerald deep badge bg
@@ -60,7 +93,7 @@ class FlatButton(tk.Label):
         bg=COLOR_BTN_SECONDARY,
         hover_bg=COLOR_BTN_SECONDARY_HOVER,
         fg=COLOR_TEXT_PRIMARY,
-        font=("Inter", 9, "bold"),
+        font=(FONT_UI, 9, "bold"),
         padx=10,
         pady=6,
         state=tk.NORMAL,
@@ -135,9 +168,9 @@ class UARTShieldApp:
     """
     @brief Ultra-compact modern minimalist control GUI for serial DTR/RTS reset shield.
     """
-    WINDOW_WIDTH = 350
-    HEIGHT_COLLAPSED = 275
-    HEIGHT_EXPANDED = 425
+    WINDOW_WIDTH = 360
+    HEIGHT_COLLAPSED = 285
+    HEIGHT_EXPANDED = 435
 
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -178,13 +211,13 @@ class UARTShieldApp:
 
     def _init_theme(self):
         """
-        @brief Initialize ttk styling for clean dark mode combobox.
+        @brief Initialize ttk styling for clean dark mode combobox with modern fonts.
         """
         self.root.option_add('*TCombobox*Listbox.background', COLOR_SURFACE)
         self.root.option_add('*TCombobox*Listbox.foreground', COLOR_TEXT_PRIMARY)
         self.root.option_add('*TCombobox*Listbox.selectBackground', COLOR_BLUE_BTN)
         self.root.option_add('*TCombobox*Listbox.selectForeground', '#ffffff')
-        self.root.option_add('*TCombobox*Listbox.font', ('Inter', 9))
+        self.root.option_add('*TCombobox*Listbox.font', (FONT_UI, 10))
         self.root.option_add('*TCombobox*Listbox.relief', tk.FLAT)
 
         style = ttk.Style()
@@ -198,7 +231,7 @@ class UARTShieldApp:
             lightcolor=COLOR_BORDER,
             arrowcolor=COLOR_TEXT_MUTED,
             bordercolor=COLOR_BORDER,
-            padding=4
+            padding=5
         )
         style.map(
             "Compact.TCombobox",
@@ -221,7 +254,7 @@ class UARTShieldApp:
         lbl_title = tk.Label(
             header_row,
             text="UART SHIELD",
-            font=("Inter", 11, "bold"),
+            font=(FONT_UI, 12, "bold"),
             fg=COLOR_TEXT_PRIMARY,
             bg=COLOR_BG
         )
@@ -230,11 +263,11 @@ class UARTShieldApp:
         lbl_badge = tk.Label(
             header_row,
             text="KERNEL",
-            font=("JetBrains Mono", 7, "bold"),
+            font=(FONT_MONO, 8, "bold"),
             fg=COLOR_TEXT_MUTED,
             bg="#162033",
-            padx=5,
-            pady=1
+            padx=6,
+            pady=2
         )
         lbl_badge.pack(side=tk.LEFT, padx=(8, 0))
 
@@ -242,24 +275,24 @@ class UARTShieldApp:
             header_row,
             text="↻ Scan",
             command=self.refresh_devices,
-            font=("Inter", 8),
+            font=(FONT_UI, 9),
             padx=8,
-            pady=2,
+            pady=3,
             border_color=COLOR_BORDER
         )
         self.btn_refresh.pack(side=tk.RIGHT)
 
-        # 2. Port Selector Dropdown
+        # 2. Port Selector Dropdown (Clean, high-legibility font)
         port_row = tk.Frame(self.main_container, bg=COLOR_BG)
         port_row.pack(fill=tk.X, pady=(0, 10))
 
         self.combo_ports = ttk.Combobox(
             port_row,
             state="readonly",
-            font=("JetBrains Mono", 9),
+            font=(FONT_UI, 10),
             style="Compact.TCombobox"
         )
-        self.combo_ports.pack(fill=tk.X, ipady=3)
+        self.combo_ports.pack(fill=tk.X, ipady=4)
         self.combo_ports.bind("<<ComboboxSelected>>", self._on_device_selected)
 
         # 3. Status & Hero Action Card
@@ -274,12 +307,12 @@ class UARTShieldApp:
         self.card.pack(fill=tk.X, pady=(0, 10))
 
         status_line = tk.Frame(self.card, bg=COLOR_SURFACE)
-        status_line.pack(fill=tk.X, pady=(0, 4))
+        status_line.pack(fill=tk.X, pady=(0, 3))
 
         self.lbl_dot = tk.Label(
             status_line,
             text="●",
-            font=("Inter", 10),
+            font=(FONT_UI, 11),
             fg=COLOR_AMBER,
             bg=COLOR_SURFACE
         )
@@ -288,16 +321,16 @@ class UARTShieldApp:
         self.lbl_status = tk.Label(
             status_line,
             text="Detecting driver...",
-            font=("Inter", 9, "bold"),
+            font=(FONT_UI, 10, "bold"),
             fg=COLOR_TEXT_PRIMARY,
             bg=COLOR_SURFACE
         )
-        self.lbl_status.pack(side=tk.LEFT, padx=(5, 0))
+        self.lbl_status.pack(side=tk.LEFT, padx=(6, 0))
 
         self.lbl_desc = tk.Label(
             self.card,
             text="Checking serial DTR/RTS pin state...",
-            font=("Inter", 8),
+            font=(FONT_UI, 9),
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_SURFACE,
             anchor=tk.W
@@ -312,7 +345,7 @@ class UARTShieldApp:
             bg=COLOR_EMERALD_BTN,
             hover_bg=COLOR_EMERALD_BTN_HOVER,
             fg="#ffffff",
-            font=("Inter", 10, "bold"),
+            font=(FONT_UI, 10, "bold"),
             pady=8,
             border_color=None
         )
@@ -326,9 +359,9 @@ class UARTShieldApp:
             actions_row,
             text="Patch Driver",
             command=self.patch_driver,
-            font=("Inter", 8),
+            font=(FONT_UI, 9),
             padx=6,
-            pady=4,
+            pady=5,
             border_color=COLOR_BORDER
         )
         self.btn_patch.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
@@ -337,9 +370,9 @@ class UARTShieldApp:
             actions_row,
             text="Restore Stock",
             command=self.restore_driver,
-            font=("Inter", 8),
+            font=(FONT_UI, 9),
             padx=6,
-            pady=4,
+            pady=5,
             border_color=COLOR_BORDER
         )
         self.btn_restore.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
@@ -351,7 +384,7 @@ class UARTShieldApp:
         self.lbl_footer = tk.Label(
             footer_row,
             text="Ready",
-            font=("Inter", 8),
+            font=(FONT_UI, 9),
             fg=COLOR_TEXT_DIM,
             bg=COLOR_BG,
             anchor=tk.W
@@ -361,7 +394,7 @@ class UARTShieldApp:
         self.btn_clear = tk.Label(
             footer_row,
             text="Clear",
-            font=("Inter", 8),
+            font=(FONT_UI, 9),
             fg=COLOR_TEXT_DIM,
             bg=COLOR_BG,
             cursor="hand2"
@@ -371,7 +404,7 @@ class UARTShieldApp:
         self.btn_log_toggle = tk.Label(
             footer_row,
             text="Log ▸",
-            font=("Inter", 8, "bold"),
+            font=(FONT_UI, 9, "bold"),
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_BG,
             cursor="hand2"
@@ -391,7 +424,7 @@ class UARTShieldApp:
             self.log_container,
             height=7,
             wrap=tk.WORD,
-            font=("JetBrains Mono", 8),
+            font=(FONT_MONO, 9),
             bg="#060911",
             fg=COLOR_TEXT_MUTED,
             insertbackground="white",
