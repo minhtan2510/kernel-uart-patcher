@@ -16,3 +16,4 @@ fi
 
 # Launch GUI
 exec python3 "$SCRIPT_DIR/gui.py" "$@"
+

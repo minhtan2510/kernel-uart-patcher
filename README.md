@@ -41,11 +41,12 @@ cd ~/Desktop/Script/LinuxUART
 ```
 
 **Tính năng trên giao diện đồ họa:**
-- Tự động nhận diện cổng và IC USB-UART khi cắm/rút thiết bị.
-- Xem trạng thái bảo vệ DTR/RTS và trạng thái bản vá kernel theo thời gian thực.
-- Nút **Bật Chặn Reset (DTR/RTS OFF)** / **Mặc Định Kernel** chuyển đổi nhanh tức thì.
-- Nút **Cài Đặt Deep Patch** và **Khôi Phục Driver Gốc** tích hợp sẵn popup hỏi mật khẩu đồ họa của Ubuntu (`pkexec`).
-- Khung nhật ký hoạt động (Terminal Log) hiển thị tiến trình chi tiết.
+- Giao diện Minimalism, phong cách Modern Dark Theme trực quan.
+- Ngôn ngữ hoàn toàn bằng tiếng Anh chuẩn kỹ thuật.
+- Tự động nhận diện cổng và driver USB-UART khi cắm/rút thiết bị.
+- Nút chuyển đổi nhanh một chạm: **PROTECTED (Reset Blocked)** / **UNPROTECTED (Default Kernel Mode)**.
+- Quản lý driver: Cài đặt **Deep Patch** và **Khôi Phục Driver Gốc** tích hợp hộp thoại xác thực `pkexec`.
+- Ngăn nhật ký (Activity Log) thu gọn tinh gọn.
 
 ---
 
