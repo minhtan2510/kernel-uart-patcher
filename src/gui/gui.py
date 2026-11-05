@@ -21,11 +21,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
 
 # ------------------------------------------------------------------------------
-# Typography & Dynamic Font Resolution
+# Typography & Pixel-Grid Font Resolution
 # ------------------------------------------------------------------------------
 def resolve_best_font(preferred_list: list, fallback: str = "sans-serif") -> str:
     """
-    @brief Resolve the highest priority font available on the host system.
+    @brief Resolve the highest priority static font available on the host system.
     @param preferred_list List of preferred font names.
     @param fallback Safe fallback name.
     @return Verified font family name.
@@ -40,15 +40,15 @@ def resolve_best_font(preferred_list: list, fallback: str = "sans-serif") -> str
     return fallback
 
 
-# Primary UI font (Open geometric sans with high x-height for readability)
+# Primary UI font (Prioritize static PostScript/OTF fonts to avoid Linux variable-font raster artifacts)
 FONT_UI = resolve_best_font(
-    ["Google Sans", "SF Pro Display", "Ubuntu", "Inter", "DejaVu Sans"],
+    ["SF Pro Display", "Ubuntu", "DejaVu Sans", "Liberation Sans"],
     "sans-serif"
 )
 
 # Monospace font for technical logs and hardware tags
 FONT_MONO = resolve_best_font(
-    ["SF Mono", "Fira Code", "JetBrains Mono", "DejaVu Sans Mono"],
+    ["SF Mono", "DejaVu Sans Mono", "Liberation Mono"],
     "monospace"
 )
 
@@ -197,7 +197,7 @@ class FlatButton(tk.Label):
         hover_bg=COLOR_BTN_SECONDARY_HOVER,
         fg=COLOR_TEXT_PRIMARY,
         hover_fg=None,
-        font=(FONT_UI, 9, "bold"),
+        font=(FONT_UI, -13, "bold"),
         padx=10,
         pady=6,
         state=tk.NORMAL,
@@ -308,6 +308,7 @@ class UARTShieldApp:
         self.is_operating = False
         self.log_expanded = False
         self.current_protected = False
+        self.current_param_exists = False
         self.spinner_idx = 0
         self.active_task_label = ""
 
@@ -335,13 +336,13 @@ class UARTShieldApp:
 
     def _init_theme(self):
         """
-        @brief Initialize ttk styling for clean dark mode combobox with modern fonts.
+        @brief Initialize ttk styling for clean dark mode combobox with pixel-grid fonts.
         """
         self.root.option_add('*TCombobox*Listbox.background', COLOR_SURFACE)
         self.root.option_add('*TCombobox*Listbox.foreground', COLOR_TEXT_PRIMARY)
         self.root.option_add('*TCombobox*Listbox.selectBackground', COLOR_BLUE_BTN)
         self.root.option_add('*TCombobox*Listbox.selectForeground', '#ffffff')
-        self.root.option_add('*TCombobox*Listbox.font', (FONT_UI, 10))
+        self.root.option_add('*TCombobox*Listbox.font', (FONT_UI, -13))
         self.root.option_add('*TCombobox*Listbox.relief', tk.FLAT)
 
         style = ttk.Style()
@@ -389,8 +390,8 @@ class UARTShieldApp:
 
         lbl_title = tk.Label(
             header_row,
-            text="UART SHIELD",
-            font=(FONT_UI, 12, "bold"),
+            text="UART Shield",
+            font=(FONT_UI, -15, "bold"),
             fg=COLOR_TEXT_PRIMARY,
             bg=COLOR_BG
         )
@@ -399,7 +400,7 @@ class UARTShieldApp:
         lbl_badge = tk.Label(
             header_row,
             text="KERNEL",
-            font=(FONT_MONO, 8, "bold"),
+            font=(FONT_MONO, -10, "bold"),
             fg=COLOR_TEXT_MUTED,
             bg="#162033",
             padx=6,
@@ -411,7 +412,7 @@ class UARTShieldApp:
             header_row,
             text="↻ Scan",
             command=self.refresh_devices,
-            font=(FONT_UI, 9),
+            font=(FONT_UI, -12, "bold"),
             padx=8,
             pady=3,
             border_color=COLOR_BORDER
@@ -425,7 +426,7 @@ class UARTShieldApp:
         self.combo_ports = ttk.Combobox(
             port_row,
             state="readonly",
-            font=(FONT_UI, 10),
+            font=(FONT_UI, -13),
             style="Compact.TCombobox"
         )
         self.combo_ports.pack(fill=tk.X, ipady=4)
@@ -444,7 +445,7 @@ class UARTShieldApp:
         self.lbl_port_warning = tk.Label(
             self.port_warning_frame,
             text="⚠ Port in use",
-            font=(FONT_UI, 8, "bold"),
+            font=(FONT_UI, -11, "bold"),
             fg=COLOR_AMBER,
             bg=COLOR_AMBER_BG
         )
@@ -478,8 +479,8 @@ class UARTShieldApp:
 
         self.lbl_status = tk.Label(
             self.status_pill,
-            text="CHECKING",
-            font=(FONT_UI, 9, "bold"),
+            text="Checking",
+            font=(FONT_UI, -12, "bold"),
             fg=COLOR_AMBER,
             bg=COLOR_AMBER_BG
         )
@@ -500,7 +501,7 @@ class UARTShieldApp:
         self.lbl_desc = tk.Label(
             self.card,
             text="Checking serial DTR/RTS pin state...",
-            font=(FONT_UI, 9),
+            font=(FONT_UI, -12),
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_SURFACE,
             anchor=tk.W
@@ -515,7 +516,7 @@ class UARTShieldApp:
             bg=COLOR_BLUE_BTN,
             hover_bg=COLOR_BLUE_BTN_HOVER,
             fg="#ffffff",
-            font=(FONT_UI, 10, "bold"),
+            font=(FONT_UI, -13, "bold"),
             pady=7,
             border_color=None
         )
@@ -528,9 +529,9 @@ class UARTShieldApp:
             actions_row,
             text="Patch Driver",
             command=self.patch_driver,
-            font=(FONT_UI, 9),
+            font=(FONT_UI, -13, "bold"),
             padx=6,
-            pady=5,
+            pady=6,
             border_color=COLOR_BORDER
         )
         self.btn_patch.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
@@ -540,9 +541,9 @@ class UARTShieldApp:
             actions_row,
             text="Restore Stock",
             command=self.restore_driver,
-            font=(FONT_UI, 9),
+            font=(FONT_UI, -13, "bold"),
             padx=6,
-            pady=5,
+            pady=6,
             bg=COLOR_BTN_SECONDARY,
             hover_bg=COLOR_RED_BG,
             fg=COLOR_TEXT_MUTED,
@@ -559,7 +560,7 @@ class UARTShieldApp:
         self.lbl_footer = tk.Label(
             footer_row,
             text="Ready • Space to toggle",
-            font=(FONT_UI, 8),
+            font=(FONT_UI, -11),
             fg=COLOR_TEXT_DIM,
             bg=COLOR_BG,
             anchor=tk.W
@@ -569,7 +570,7 @@ class UARTShieldApp:
         self.btn_clear = tk.Label(
             footer_row,
             text="Clear",
-            font=(FONT_UI, 9),
+            font=(FONT_UI, -11),
             fg=COLOR_TEXT_DIM,
             bg=COLOR_BG,
             cursor="hand2"
@@ -579,7 +580,7 @@ class UARTShieldApp:
         self.btn_log_toggle = tk.Label(
             footer_row,
             text="Log ▸",
-            font=(FONT_UI, 9, "bold"),
+            font=(FONT_UI, -12, "bold"),
             fg=COLOR_TEXT_MUTED,
             bg=COLOR_BG,
             cursor="hand2"
@@ -599,7 +600,7 @@ class UARTShieldApp:
             self.log_container,
             height=7,
             wrap=tk.WORD,
-            font=(FONT_MONO, 9),
+            font=(FONT_MONO, -12),
             bg="#060911",
             fg=COLOR_TEXT_MUTED,
             insertbackground="white",
@@ -815,14 +816,14 @@ class UARTShieldApp:
                 if val in ("Y", "1"):
                     # Shield Active
                     self.current_protected = True
-                    self._set_pill_style(text="● SHIELD ACTIVE", fg=COLOR_EMERALD, bg=COLOR_EMERALD_BG, border=COLOR_EMERALD_BORDER)
+                    self._set_pill_style(text="● Shield Active", fg=COLOR_EMERALD, bg=COLOR_EMERALD_BG, border=COLOR_EMERALD_BORDER)
                     self.lbl_desc.configure(text="Hardware resets blocked (DTR held HIGH)")
                     self.switch.set_state(True)
                     self.switch.set_enabled(True)
                 else:
                     # Shield Inactive
                     self.current_protected = False
-                    self._set_pill_style(text="○ SHIELD INACTIVE", fg=COLOR_AMBER, bg=COLOR_AMBER_BG, border=COLOR_AMBER_BORDER)
+                    self._set_pill_style(text="○ Shield Inactive", fg=COLOR_AMBER, bg=COLOR_AMBER_BG, border=COLOR_AMBER_BORDER)
                     self.lbl_desc.configure(text="Default Linux mode (DTR asserts on connect)")
                     self.switch.set_state(False)
                     self.switch.set_enabled(True)
@@ -851,7 +852,7 @@ class UARTShieldApp:
         """
         self.current_param_exists = False
         self.current_protected = False
-        self._set_pill_style(text="△ STOCK DRIVER", fg=COLOR_TEXT_MUTED, bg="#1a2336", border="#2e3d5b")
+        self._set_pill_style(text="△ Stock Driver", fg=COLOR_TEXT_MUTED, bg="#1a2336", border="#2e3d5b")
         self.lbl_desc.configure(text=f"'{driver}' unpatched. Install shield to block resets.")
         self.switch.set_state(False)
         self.switch.set_enabled(False)
@@ -867,7 +868,7 @@ class UARTShieldApp:
         self.current_param_exists = False
         self.current_protected = False
         self.port_warning_frame.pack_forget()
-        self._set_pill_style(text="NO DEVICE", fg=COLOR_TEXT_DIM, bg="#131926", border="#1e293b")
+        self._set_pill_style(text="No Device", fg=COLOR_TEXT_DIM, bg="#131926", border="#1e293b")
         self.lbl_desc.configure(text="Connect a USB-UART adapter or gimbal.")
         self.switch.set_state(False)
         self.switch.set_enabled(False)
