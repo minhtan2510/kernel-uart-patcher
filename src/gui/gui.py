@@ -67,11 +67,16 @@ COLOR_TEXT_DIM = "#64748b"     # Slate 500
 
 COLOR_EMERALD = "#10b981"      # Emerald 500 (Protected active)
 COLOR_EMERALD_BG = "#064e3b"   # Emerald deep badge bg
-COLOR_EMERALD_BTN = "#059669"  # Emerald 600 primary action
-COLOR_EMERALD_BTN_HOVER = "#10b981"
+COLOR_EMERALD_BORDER = "#059669"
 
 COLOR_AMBER = "#f59e0b"        # Amber 500 (Unprotected warning)
 COLOR_AMBER_BG = "#451a03"
+COLOR_AMBER_BORDER = "#b45309"
+
+COLOR_RED = "#ef4444"          # Red 500
+COLOR_RED_BG = "#381313"
+COLOR_RED_BORDER = "#7f1d1d"
+COLOR_RED_TEXT = "#fca5a5"
 
 COLOR_BLUE_BTN = "#2563eb"     # Blue 600
 COLOR_BLUE_BTN_HOVER = "#3b82f6"
@@ -81,9 +86,107 @@ COLOR_BTN_SECONDARY_HOVER = "#24314c"
 COLOR_BTN_SECONDARY_BORDER = "#27354f"
 
 
+# ------------------------------------------------------------------------------
+# Custom UI Components (Modern Switch & Flat Button)
+# ------------------------------------------------------------------------------
+class ModernSwitch(tk.Canvas):
+    """
+    @brief Crisp interactive pill toggle switch for runtime parameter switching.
+    """
+    def __init__(
+        self,
+        parent,
+        state: bool = True,
+        command=None,
+        width: int = 46,
+        height: int = 24,
+        bg_card: str = COLOR_SURFACE
+    ):
+        super().__init__(
+            parent,
+            width=width,
+            height=height,
+            bg=bg_card,
+            highlightthickness=0,
+            cursor="hand2"
+        )
+        self.state = state
+        self.enabled = True
+        self.command = command
+        self.width = width
+        self.height = height
+
+        self.bind("<Button-1>", self._on_click)
+        self.draw()
+
+    def draw(self):
+        """
+        @brief Render anti-aliased pill geometry and thumb.
+        """
+        self.delete("all")
+        h = self.height
+        w = self.width
+        r = h // 2
+
+        if not self.enabled:
+            bg = "#162033"
+            border = "#1e293b"
+            thumb = "#475569"
+            tx = r
+        elif self.state:
+            bg = COLOR_EMERALD
+            border = COLOR_EMERALD_BORDER
+            thumb = "#ffffff"
+            tx = w - r
+        else:
+            bg = "#1e293b"
+            border = "#334155"
+            thumb = "#94a3b8"
+            tx = r
+
+        # Pill background (arcs + center rectangle)
+        self.create_oval(1, 1, h - 1, h - 1, fill=bg, outline=border)
+        self.create_oval(w - h + 1, 1, w - 1, h - 1, fill=bg, outline=border)
+        self.create_rectangle(r, 1, w - r, h - 1, fill=bg, outline="")
+        self.create_line(r, 1, w - r, 1, fill=border)
+        self.create_line(r, h - 1, w - r, h - 1, fill=border)
+
+        # Thumb circle
+        pad = 3
+        tr = r - pad
+        self.create_oval(tx - tr, pad, tx + tr, h - pad, fill=thumb, outline="")
+
+    def _on_click(self, _):
+        """
+        @brief Handle user click event on switch.
+        """
+        if self.enabled:
+            self.state = not self.state
+            self.draw()
+            if self.command:
+                self.command(self.state)
+
+    def set_state(self, state: bool):
+        """
+        @brief Update switch toggle position without triggering command.
+        @param state True for ON, False for OFF.
+        """
+        self.state = state
+        self.draw()
+
+    def set_enabled(self, enabled: bool):
+        """
+        @brief Enable or lock the switch.
+        @param enabled True for active, False for locked/grayed out.
+        """
+        self.enabled = enabled
+        self.configure(cursor="hand2" if enabled else "arrow")
+        self.draw()
+
+
 class FlatButton(tk.Label):
     """
-    @brief Minimalist flat button with hover feedback and solid borders.
+    @brief Minimalist flat button with hover feedback, border color, and optional danger theme.
     """
     def __init__(
         self,
@@ -93,11 +196,13 @@ class FlatButton(tk.Label):
         bg=COLOR_BTN_SECONDARY,
         hover_bg=COLOR_BTN_SECONDARY_HOVER,
         fg=COLOR_TEXT_PRIMARY,
+        hover_fg=None,
         font=(FONT_UI, 9, "bold"),
         padx=10,
         pady=6,
         state=tk.NORMAL,
         border_color=COLOR_BORDER,
+        hover_border_color=None,
         **kwargs
     ):
         super().__init__(
@@ -116,9 +221,12 @@ class FlatButton(tk.Label):
         )
         self.default_bg = bg
         self.hover_bg = hover_bg
+        self.default_fg = fg
+        self.hover_fg = hover_fg if hover_fg else fg
+        self.border_color = border_color
+        self.hover_border_color = hover_border_color if hover_border_color else border_color
         self.command = command
         self.state_val = state
-        self.default_fg = fg
 
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
@@ -126,11 +234,19 @@ class FlatButton(tk.Label):
 
     def _on_enter(self, _):
         if self.state_val == tk.NORMAL:
-            self.configure(bg=self.hover_bg)
+            self.configure(
+                bg=self.hover_bg,
+                fg=self.hover_fg,
+                highlightbackground=self.hover_border_color
+            )
 
     def _on_leave(self, _):
         if self.state_val == tk.NORMAL:
-            self.configure(bg=self.default_bg)
+            self.configure(
+                bg=self.default_bg,
+                fg=self.default_fg,
+                highlightbackground=self.border_color
+            )
 
     def _on_click(self, _):
         if self.state_val == tk.NORMAL and self.command:
@@ -143,34 +259,39 @@ class FlatButton(tk.Label):
         """
         self.state_val = state
         if state == tk.DISABLED:
-            self.configure(cursor="arrow", fg=COLOR_TEXT_DIM, bg="#0d131f")
+            self.configure(cursor="arrow", fg=COLOR_TEXT_DIM, bg="#0d131f", highlightbackground="#162033")
         else:
-            self.configure(cursor="hand2", fg=self.default_fg, bg=self.default_bg)
+            self.configure(cursor="hand2", fg=self.default_fg, bg=self.default_bg, highlightbackground=self.border_color)
 
-    def set_theme(self, bg: str, hover_bg: str, fg=COLOR_TEXT_PRIMARY, border_color=None):
+    def set_theme(self, bg: str, hover_bg: str, fg=COLOR_TEXT_PRIMARY, border_color=None, hover_border_color=None, hover_fg=None):
         """
         @brief Reconfigure button theme dynamically.
-        @param bg Normal background color.
-        @param hover_bg Background color on hover.
-        @param fg Text color.
-        @param border_color Optional border highlight.
         """
         self.default_bg = bg
         self.hover_bg = hover_bg
         self.default_fg = fg
+        self.hover_fg = hover_fg if hover_fg else fg
         if border_color is not None:
+            self.border_color = border_color
             self.configure(highlightbackground=border_color)
+        if hover_border_color is not None:
+            self.hover_border_color = hover_border_color
         if self.state_val == tk.NORMAL:
             self.configure(bg=bg, fg=fg)
 
 
+# ------------------------------------------------------------------------------
+# Main Application Class
+# ------------------------------------------------------------------------------
 class UARTShieldApp:
     """
     @brief Ultra-compact modern minimalist control GUI for serial DTR/RTS reset shield.
     """
     WINDOW_WIDTH = 360
-    HEIGHT_COLLAPSED = 285
-    HEIGHT_EXPANDED = 435
+    HEIGHT_COLLAPSED = 320
+    HEIGHT_EXPANDED = 470
+
+    SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -187,9 +308,12 @@ class UARTShieldApp:
         self.is_operating = False
         self.log_expanded = False
         self.current_protected = False
+        self.spinner_idx = 0
+        self.active_task_label = ""
 
         self._init_theme()
         self._build_ui()
+        self._bind_shortcuts()
         self._start_log_consumer()
 
         # Initial device scan & auto refresh timer
@@ -240,6 +364,18 @@ class UARTShieldApp:
             selectforeground=[("readonly", COLOR_TEXT_PRIMARY)]
         )
 
+    def _bind_shortcuts(self):
+        """
+        @brief Register keyboard shortcuts for fast power-user access.
+        """
+        self.root.bind("<space>", lambda _: self._on_space_pressed())
+        self.root.bind("<Control-r>", lambda _: self.refresh_devices())
+        self.root.bind("<Control-R>", lambda _: self.refresh_devices())
+        self.root.bind("<F5>", lambda _: self.refresh_devices())
+        self.root.bind("<Control-l>", lambda _: self._toggle_log_drawer())
+        self.root.bind("<Control-L>", lambda _: self._toggle_log_drawer())
+        self.root.bind("<Escape>", lambda _: self.root.destroy())
+
     def _build_ui(self):
         """
         @brief Construct ultra-compact minimalist interface.
@@ -247,9 +383,9 @@ class UARTShieldApp:
         self.main_container = tk.Frame(self.root, bg=COLOR_BG, padx=14, pady=12)
         self.main_container.pack(fill=tk.BOTH, expand=True)
 
-        # 1. Header Row (App Title + Linux Pill + Refresh Button)
+        # 1. Header Row (App Title + Kernel Pill + Refresh Button)
         header_row = tk.Frame(self.main_container, bg=COLOR_BG)
-        header_row.pack(fill=tk.X, pady=(0, 10))
+        header_row.pack(fill=tk.X, pady=(0, 8))
 
         lbl_title = tk.Label(
             header_row,
@@ -282,9 +418,9 @@ class UARTShieldApp:
         )
         self.btn_refresh.pack(side=tk.RIGHT)
 
-        # 2. Port Selector Dropdown (Clean, high-legibility font)
+        # 2. Port Selector Dropdown Row
         port_row = tk.Frame(self.main_container, bg=COLOR_BG)
-        port_row.pack(fill=tk.X, pady=(0, 10))
+        port_row.pack(fill=tk.X, pady=(0, 6))
 
         self.combo_ports = ttk.Combobox(
             port_row,
@@ -294,8 +430,27 @@ class UARTShieldApp:
         )
         self.combo_ports.pack(fill=tk.X, ipady=4)
         self.combo_ports.bind("<<ComboboxSelected>>", self._on_device_selected)
+        self.combo_ports.bind("<Double-Button-1>", lambda _: self._copy_port_to_clipboard())
 
-        # 3. Status & Hero Action Card
+        # 2b. Port In-Use Warning Chip (Hidden by default, shown if process locks port)
+        self.port_warning_frame = tk.Frame(
+            self.main_container,
+            bg=COLOR_AMBER_BG,
+            highlightthickness=1,
+            highlightbackground=COLOR_AMBER_BORDER,
+            padx=8,
+            pady=3
+        )
+        self.lbl_port_warning = tk.Label(
+            self.port_warning_frame,
+            text="⚠ Port in use",
+            font=(FONT_UI, 8, "bold"),
+            fg=COLOR_AMBER,
+            bg=COLOR_AMBER_BG
+        )
+        self.lbl_port_warning.pack(side=tk.LEFT)
+
+        # 3. Hero Status & Interactive Switch Card
         self.card = tk.Frame(
             self.main_container,
             bg=COLOR_SURFACE,
@@ -304,29 +459,44 @@ class UARTShieldApp:
             padx=12,
             pady=12
         )
-        self.card.pack(fill=tk.X, pady=(0, 10))
+        self.card.pack(fill=tk.X, pady=(4, 10))
 
+        # Status Line: Glowing Status Pill (Left) + Modern Switch (Right)
         status_line = tk.Frame(self.card, bg=COLOR_SURFACE)
-        status_line.pack(fill=tk.X, pady=(0, 3))
+        status_line.pack(fill=tk.X, pady=(0, 6))
 
-        self.lbl_dot = tk.Label(
+        # Status Pill Badge
+        self.status_pill = tk.Frame(
             status_line,
-            text="●",
-            font=(FONT_UI, 11),
-            fg=COLOR_AMBER,
-            bg=COLOR_SURFACE
+            bg=COLOR_AMBER_BG,
+            highlightthickness=1,
+            highlightbackground=COLOR_AMBER_BORDER,
+            padx=8,
+            pady=3
         )
-        self.lbl_dot.pack(side=tk.LEFT)
+        self.status_pill.pack(side=tk.LEFT)
 
         self.lbl_status = tk.Label(
-            status_line,
-            text="Detecting driver...",
-            font=(FONT_UI, 10, "bold"),
-            fg=COLOR_TEXT_PRIMARY,
-            bg=COLOR_SURFACE
+            self.status_pill,
+            text="CHECKING",
+            font=(FONT_UI, 9, "bold"),
+            fg=COLOR_AMBER,
+            bg=COLOR_AMBER_BG
         )
-        self.lbl_status.pack(side=tk.LEFT, padx=(6, 0))
+        self.lbl_status.pack()
 
+        # Modern Interactive Toggle Switch
+        self.switch = ModernSwitch(
+            status_line,
+            state=False,
+            command=self._on_switch_toggled,
+            width=46,
+            height=24,
+            bg_card=COLOR_SURFACE
+        )
+        self.switch.pack(side=tk.RIGHT)
+
+        # Description text
         self.lbl_desc = tk.Label(
             self.card,
             text="Checking serial DTR/RTS pin state...",
@@ -335,25 +505,24 @@ class UARTShieldApp:
             bg=COLOR_SURFACE,
             anchor=tk.W
         )
-        self.lbl_desc.pack(fill=tk.X, pady=(0, 10))
+        self.lbl_desc.pack(fill=tk.X, pady=(2, 0))
 
-        # Primary Toggle CTA Button
-        self.btn_main = FlatButton(
+        # CTA Button inside Card (Only shown if Stock Driver requires install)
+        self.btn_stock_install = FlatButton(
             self.card,
-            text="Enable Shield",
-            command=self._on_main_toggle_clicked,
-            bg=COLOR_EMERALD_BTN,
-            hover_bg=COLOR_EMERALD_BTN_HOVER,
+            text="Install Kernel Shield",
+            command=self.patch_driver,
+            bg=COLOR_BLUE_BTN,
+            hover_bg=COLOR_BLUE_BTN_HOVER,
             fg="#ffffff",
             font=(FONT_UI, 10, "bold"),
-            pady=8,
+            pady=7,
             border_color=None
         )
-        self.btn_main.pack(fill=tk.X)
 
-        # 4. Secondary Quick Actions (Compact 2-Pill Bar)
+        # 4. Secondary Operations Row (Patch / Restore buttons)
         actions_row = tk.Frame(self.main_container, bg=COLOR_BG)
-        actions_row.pack(fill=tk.X, pady=(0, 10))
+        actions_row.pack(fill=tk.X, pady=(0, 8))
 
         self.btn_patch = FlatButton(
             actions_row,
@@ -366,6 +535,7 @@ class UARTShieldApp:
         )
         self.btn_patch.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
 
+        # Danger hover for Restore Stock to prevent accidental clicks
         self.btn_restore = FlatButton(
             actions_row,
             text="Restore Stock",
@@ -373,7 +543,12 @@ class UARTShieldApp:
             font=(FONT_UI, 9),
             padx=6,
             pady=5,
-            border_color=COLOR_BORDER
+            bg=COLOR_BTN_SECONDARY,
+            hover_bg=COLOR_RED_BG,
+            fg=COLOR_TEXT_MUTED,
+            hover_fg=COLOR_RED_TEXT,
+            border_color=COLOR_BORDER,
+            hover_border_color=COLOR_RED
         )
         self.btn_restore.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
 
@@ -383,8 +558,8 @@ class UARTShieldApp:
 
         self.lbl_footer = tk.Label(
             footer_row,
-            text="Ready",
-            font=(FONT_UI, 9),
+            text="Ready • Space to toggle",
+            font=(FONT_UI, 8),
             fg=COLOR_TEXT_DIM,
             bg=COLOR_BG,
             anchor=tk.W
@@ -434,6 +609,34 @@ class UARTShieldApp:
         )
         self.txt_log.pack(fill=tk.BOTH, expand=True)
 
+    def _copy_port_to_clipboard(self):
+        """
+        @brief Copy currently selected port name to system clipboard.
+        """
+        port = self._get_current_port()
+        if port:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(port)
+            self._flash_footer(f"Copied {port} to clipboard!")
+
+    def _flash_footer(self, message: str, delay_ms: int = 2500):
+        """
+        @brief Temporarily display a toast message in the footer bar.
+        @param message Text to display.
+        @param delay_ms Milliseconds before resetting to default status.
+        """
+        self.lbl_footer.config(text=message, fg=COLOR_EMERALD)
+        self.root.after(delay_ms, lambda: self.lbl_footer.config(text="Ready • Space to toggle", fg=COLOR_TEXT_DIM))
+
+    def _on_space_pressed(self):
+        """
+        @brief Handle Spacebar press to toggle switch if active.
+        """
+        if not self.is_operating and self.switch.enabled:
+            new_state = not self.switch.state
+            self.switch.set_state(new_state)
+            self._on_switch_toggled(new_state)
+
     def _toggle_log_drawer(self):
         """
         @brief Toggle collapsible mini activity log drawer and adjust window height.
@@ -477,7 +680,7 @@ class UARTShieldApp:
 
     def set_operating(self, operating: bool, status_msg: str = ""):
         """
-        @brief Enable or disable controls during an active operation.
+        @brief Enable or disable controls during an active operation and run spinner.
         @param operating True if busy running a command.
         @param status_msg Status bar description.
         """
@@ -485,13 +688,27 @@ class UARTShieldApp:
         state = tk.DISABLED if operating else tk.NORMAL
 
         self.btn_refresh.set_state(state)
-        self.btn_main.set_state(state)
         self.btn_patch.set_state(state)
         self.btn_restore.set_state(state)
+        self.btn_stock_install.set_state(state)
+        self.switch.set_enabled(not operating and self.current_param_exists)
         self.combo_ports.config(state="readonly" if not operating else tk.DISABLED)
 
-        if status_msg:
-            self.lbl_footer.config(text=status_msg)
+        self.active_task_label = status_msg
+        if operating:
+            self._animate_spinner()
+        else:
+            self.lbl_footer.config(text=status_msg if status_msg else "Ready • Space to toggle", fg=COLOR_TEXT_DIM)
+
+    def _animate_spinner(self):
+        """
+        @brief Animate spinner in footer while an operation is active.
+        """
+        if self.is_operating:
+            frame = self.SPINNER_FRAMES[self.spinner_idx % len(self.SPINNER_FRAMES)]
+            self.spinner_idx += 1
+            self.lbl_footer.config(text=f"{frame} {self.active_task_label}", fg=COLOR_BLUE_BTN_HOVER)
+            self.root.after(100, self._animate_spinner)
 
     # --------------------------------------------------------------------------
     # Device Scanning & State Resolution
@@ -499,7 +716,7 @@ class UARTShieldApp:
 
     def refresh_devices(self):
         """
-        @brief Scan available serial ports and query driver parameters.
+        @brief Scan available serial ports, check process locks, and query driver parameters.
         """
         if self.is_operating:
             return
@@ -536,20 +753,40 @@ class UARTShieldApp:
             self._update_selected_info()
         else:
             self.combo_ports.set("No serial ports detected")
-            self.lbl_dot.configure(fg=COLOR_TEXT_DIM)
-            self.lbl_status.configure(text="No Device", fg=COLOR_TEXT_DIM)
-            self.lbl_desc.configure(text="Connect a USB-UART adapter or gimbal.")
-            self.btn_main.configure(text="No Device")
-            self.btn_main.set_state(tk.DISABLED)
-            self.btn_patch.set_state(tk.DISABLED)
-            self.btn_restore.set_state(tk.DISABLED)
+            self._set_no_device_state()
+
+    def _check_port_lock(self, port_path: str):
+        """
+        @brief Check if an active process holds an open file descriptor on the port.
+        @param port_path e.g. /dev/ttyUSB0
+        @return Tuple (pid, process_name) or (None, None).
+        """
+        try:
+            res = subprocess.run(
+                ["fuser", port_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            pids = res.stdout.strip().split()
+            if pids:
+                pid = pids[0]
+                comm = pid
+                comm_file = f"/proc/{pid}/comm"
+                if os.path.isfile(comm_file):
+                    with open(comm_file, "r") as f:
+                        comm = f.read().strip()
+                return pid, comm
+        except Exception:
+            pass
+        return None, None
 
     def _on_device_selected(self, _=None):
         self._update_selected_info()
 
     def _update_selected_info(self):
         """
-        @brief Refresh status badge and action button based on sysfs driver parameter.
+        @brief Refresh status badge, toggle switch, and port lock warning.
         """
         idx = self.combo_ports.current()
         if idx < 0 or idx >= len(self.devices):
@@ -557,40 +794,41 @@ class UARTShieldApp:
 
         dev = self.devices[idx]
         driver = dev["driver"]
+        port = dev["port"]
+
+        # 1. Check if process is locking port
+        lock_pid, lock_name = self._check_port_lock(port)
+        if lock_pid:
+            self.lbl_port_warning.configure(text=f"⚠ Port in use: {lock_name} (PID {lock_pid})")
+            self.port_warning_frame.pack(fill=tk.X, pady=(0, 6), before=self.card)
+        else:
+            self.port_warning_frame.pack_forget()
+
+        # 2. Check kernel module parameter
         param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts"
 
         if os.path.isfile(param_file):
+            self.current_param_exists = True
             try:
                 with open(param_file, "r") as f:
                     val = f.read().strip()
                 if val in ("Y", "1"):
-                    # Shield Active (Reset Blocked)
+                    # Shield Active
                     self.current_protected = True
-                    self.lbl_dot.configure(fg=COLOR_EMERALD)
-                    self.lbl_status.configure(text="Shield Active", fg=COLOR_EMERALD)
-                    self.lbl_desc.configure(text="DTR/RTS locked HIGH (resets blocked)")
-                    self.btn_main.configure(text="Disable Shield")
-                    self.btn_main.set_theme(
-                        bg=COLOR_BTN_SECONDARY,
-                        hover_bg=COLOR_BTN_SECONDARY_HOVER,
-                        fg=COLOR_TEXT_PRIMARY,
-                        border_color=COLOR_BORDER
-                    )
+                    self._set_pill_style(text="● SHIELD ACTIVE", fg=COLOR_EMERALD, bg=COLOR_EMERALD_BG, border=COLOR_EMERALD_BORDER)
+                    self.lbl_desc.configure(text="Hardware resets blocked (DTR held HIGH)")
+                    self.switch.set_state(True)
+                    self.switch.set_enabled(True)
                 else:
-                    # Unprotected (Normal Kernel Assertions)
+                    # Shield Inactive
                     self.current_protected = False
-                    self.lbl_dot.configure(fg=COLOR_AMBER)
-                    self.lbl_status.configure(text="Shield Inactive", fg=COLOR_AMBER)
-                    self.lbl_desc.configure(text="Kernel asserts DTR/RTS on connect")
-                    self.btn_main.configure(text="Enable Shield")
-                    self.btn_main.set_theme(
-                        bg=COLOR_EMERALD_BTN,
-                        hover_bg=COLOR_EMERALD_BTN_HOVER,
-                        fg="#ffffff",
-                        border_color=None
-                    )
+                    self._set_pill_style(text="○ SHIELD INACTIVE", fg=COLOR_AMBER, bg=COLOR_AMBER_BG, border=COLOR_AMBER_BORDER)
+                    self.lbl_desc.configure(text="Default Linux mode (DTR asserts on connect)")
+                    self.switch.set_state(False)
+                    self.switch.set_enabled(True)
 
-                self.btn_main.set_state(tk.NORMAL)
+                self.btn_stock_install.pack_forget()
+                self.btn_patch.configure(text="Rebuild Patch")
             except Exception:
                 self._set_stock_state(driver)
         else:
@@ -599,23 +837,43 @@ class UARTShieldApp:
         self.btn_patch.set_state(tk.NORMAL)
         self.btn_restore.set_state(tk.NORMAL)
 
+    def _set_pill_style(self, text: str, fg: str, bg: str, border: str):
+        """
+        @brief Update glowing status pill label and container.
+        """
+        self.status_pill.configure(bg=bg, highlightbackground=border)
+        self.lbl_status.configure(text=text, fg=fg, bg=bg)
+
     def _set_stock_state(self, driver: str):
         """
         @brief Update UI when stock (unpatched) driver is in use.
         @param driver Driver module name (e.g. cp210x).
         """
+        self.current_param_exists = False
         self.current_protected = False
-        self.lbl_dot.configure(fg=COLOR_AMBER)
-        self.lbl_status.configure(text="Stock Driver", fg=COLOR_AMBER)
-        self.lbl_desc.configure(text=f"'{driver}' unpatched. Install patch to shield.")
-        self.btn_main.configure(text="Install & Shield")
-        self.btn_main.set_theme(
-            bg=COLOR_BLUE_BTN,
-            hover_bg=COLOR_BLUE_BTN_HOVER,
-            fg="#ffffff",
-            border_color=None
-        )
-        self.btn_main.set_state(tk.NORMAL)
+        self._set_pill_style(text="△ STOCK DRIVER", fg=COLOR_TEXT_MUTED, bg="#1a2336", border="#2e3d5b")
+        self.lbl_desc.configure(text=f"'{driver}' unpatched. Install shield to block resets.")
+        self.switch.set_state(False)
+        self.switch.set_enabled(False)
+
+        # Show prominent install button inside card
+        self.btn_stock_install.pack(fill=tk.X, pady=(10, 0))
+        self.btn_patch.configure(text="Patch Driver")
+
+    def _set_no_device_state(self):
+        """
+        @brief Update UI when no serial hardware is connected.
+        """
+        self.current_param_exists = False
+        self.current_protected = False
+        self.port_warning_frame.pack_forget()
+        self._set_pill_style(text="NO DEVICE", fg=COLOR_TEXT_DIM, bg="#131926", border="#1e293b")
+        self.lbl_desc.configure(text="Connect a USB-UART adapter or gimbal.")
+        self.switch.set_state(False)
+        self.switch.set_enabled(False)
+        self.btn_stock_install.pack_forget()
+        self.btn_patch.set_state(tk.DISABLED)
+        self.btn_restore.set_state(tk.DISABLED)
 
     def _schedule_auto_refresh(self):
         """
@@ -635,6 +893,15 @@ class UARTShieldApp:
             return self.devices[idx]["driver"]
         return "cp210x"
 
+    def _get_current_port(self) -> str:
+        """
+        @brief Retrieve serial port path (e.g. /dev/ttyUSB0).
+        """
+        idx = self.combo_ports.current()
+        if idx >= 0 and idx < len(self.devices):
+            return self.devices[idx]["port"]
+        return ""
+
     # --------------------------------------------------------------------------
     # Asynchronous Execution via Core Script
     # --------------------------------------------------------------------------
@@ -653,7 +920,7 @@ class UARTShieldApp:
         if not self.log_expanded:
             self._toggle_log_drawer()
 
-        self.set_operating(True, f"{task_name}...")
+        self.set_operating(True, task_name)
         self.log(f"\n[ACTION] {task_name}")
 
         def worker():
@@ -676,13 +943,13 @@ class UARTShieldApp:
 
                 if rc == 0:
                     self.log(f"[DONE] {task_name} succeeded.")
-                    msg = f"{task_name} done."
+                    msg = f"✓ {task_name} succeeded."
                 elif rc in (126, 127):
                     self.log(f"[CANCEL] {task_name} cancelled by user.")
-                    msg = "Cancelled."
+                    msg = "Operation cancelled."
                 else:
                     self.log(f"[FAIL] {task_name} failed (exit code: {rc}).")
-                    msg = f"{task_name} failed."
+                    msg = f"Failed (exit code {rc})."
 
             except Exception as e:
                 self.log(f"[ERROR] {e}")
@@ -711,9 +978,10 @@ class UARTShieldApp:
     # Action Handlers
     # --------------------------------------------------------------------------
 
-    def _on_main_toggle_clicked(self):
+    def _on_switch_toggled(self, new_state: bool):
         """
-        @brief Handle clicks on the hero action button.
+        @brief Handle user toggling the Modern Switch.
+        @param new_state True for Shield ON, False for Shield OFF.
         """
         driver = self._get_current_driver()
         param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts"
@@ -721,9 +989,9 @@ class UARTShieldApp:
         if not os.path.isfile(param_file):
             self.patch_driver()
         else:
-            new_val = 0 if self.current_protected else 1
-            task = "Shield Active" if new_val == 1 else "Shield Inactive"
-            self._run_core_command(["toggle", driver, str(new_val)], f"Set {task}")
+            val = 1 if new_state else 0
+            label = "Shield Active" if val == 1 else "Shield Inactive"
+            self._run_core_command(["toggle", driver, str(val)], f"Set {label}")
 
     def patch_driver(self):
         """
@@ -732,7 +1000,8 @@ class UARTShieldApp:
         driver = self._get_current_driver()
         confirm = messagebox.askyesno(
             "Install Patch",
-            f"Build and install DTR/RTS reset shield for '{driver}'?",
+            f"Build and install DTR/RTS reset shield for '{driver}'?\n\n"
+            "This will download, patch, and install the kernel driver module.",
             parent=self.root
         )
         if not confirm:
@@ -746,8 +1015,9 @@ class UARTShieldApp:
         """
         driver = self._get_current_driver()
         confirm = messagebox.askyesno(
-            "Restore Stock",
-            f"Restore original factory driver for '{driver}'?",
+            "Restore Stock Driver",
+            f"Restore original factory driver for '{driver}'?\n\n"
+            "Warning: This will remove reset protection and restore standard Ubuntu DTR/RTS behavior.",
             parent=self.root
         )
         if not confirm:

@@ -102,3 +102,4 @@ python3 -c "import tkinter as tk, sys; sys.path.insert(0, 'src/gui'); import gui
    - If `rmmod` still reports in use, a userspace process has `/dev/ttyUSB*` open. Identify via `fuser /dev/ttyUSB*` or `lsof /dev/ttyUSB*`.
 3. **Typography Resolution**:
    - The GUI uses `resolve_best_font()` to dynamically cascade fonts (`Google Sans` → `SF Pro Display` → `Ubuntu` → `Inter`). Do not hardcode a single font family without fallback.
+

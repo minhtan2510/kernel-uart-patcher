@@ -54,6 +54,16 @@
   - Modern Dark palette: Slate 950 (`#090D16`), Card (`#111726`), Border (`#1E293B`).
   - Typography: `Google Sans` (UI) with fallback to `SF Pro Display` / `Ubuntu` / `Inter`, and `SF Mono` (Monospace) with fallback to `Fira Code` / `JetBrains Mono`.
 
+### [2026-11-05] ADR-06: Modern Interactive Switch, Port Lock Warning & UX Polish
+* **Context:** Binary runtime toggling via `toggle 0|1` was previously operated via a generic button, which did not cleanly convey binary on/off state, and port conflicts with background processes caused silent `rmmod` failures.
+* **Decision:**
+  - Implemented `ModernSwitch` (`tk.Canvas` pill toggle switch) for direct tactile on/off control of `disable_dtr_rts`.
+  - Added `_check_port_lock()` using `fuser` to detect and display warning chips when a background process holds the port open.
+  - Added danger hover state (`#ef4444`) to `Restore Stock` to protect against accidental downgrade.
+  - Added in-button animated ASCII progress spinner during async `pkexec` operations.
+  - Added keyboard shortcuts (`Space` to toggle, `Ctrl+R` to scan, `Ctrl+L` for logs, `Esc` to quit) and double-click to copy port.
+* **Consequences:** Intuitive tactile control, zero accidental resets, and instant visibility into port locks.
+
 ---
 
 ## 3. Known Gotchas & Constraints
@@ -74,3 +84,4 @@
 * [x] Project reorganized with single root executable (`./run.sh`).
 * [x] Typography upgraded to Google Sans + SF Mono.
 * [ ] Support testing for additional USB-UART bridges (`ch341`, `ftdi_sio`, `pl2303`).
+
