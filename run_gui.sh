@@ -10,10 +10,9 @@ cd "$SCRIPT_DIR"
 
 # Verify python3 is installed
 if ! command -v python3 &>/dev/null; then
-    echo "Lỗi: Chưa cài đặt python3 trên hệ thống."
+    echo "Error: python3 is not installed on this system."
     exit 1
 fi
 
 # Launch GUI
 exec python3 "$SCRIPT_DIR/gui.py" "$@"
-
