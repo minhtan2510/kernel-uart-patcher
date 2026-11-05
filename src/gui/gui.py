@@ -20,40 +20,40 @@ from PyQt6.QtCore import (
     QEasingCurve, pyqtProperty
 )
 from PyQt6.QtGui import (
-    QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut
+    QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut, QPainterPath
 )
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
 
 # ------------------------------------------------------------------------------
-# Modern Minimalist Palette (Tailwind Slate / Zinc inspired)
+# Modern Minimalist Light Palette (Tailwind Slate / Zinc inspired)
 # ------------------------------------------------------------------------------
-COLOR_BG = "#0b0f19"              # Deep midnight slate
-COLOR_SURFACE = "#131b2e"         # Card surface
-COLOR_SURFACE_HOVER = "#1c2742"   # Surface hover
-COLOR_BORDER = "#1e293b"          # Base border
-COLOR_CARD_BORDER = "#25334d"     # Distinct card border
+COLOR_BG = "#f8fafc"              # Slate 50 (Soft, clean background)
+COLOR_SURFACE = "#ffffff"         # Pure white (Card surface & inputs)
+COLOR_SURFACE_HOVER = "#f1f5f9"   # Slate 100 (Hover on white)
+COLOR_BORDER = "#e2e8f0"          # Slate 200 (Clean divider/subtle border)
+COLOR_CARD_BORDER = "#cbd5e1"     # Slate 300 (Crisp card & control border)
 
-COLOR_TEXT_PRIMARY = "#f8fafc"    # Crisp white
-COLOR_TEXT_MUTED = "#94a3b8"      # Slate 400
-COLOR_TEXT_DIM = "#64748b"        # Slate 500
+COLOR_TEXT_PRIMARY = "#0f172a"    # Slate 900 (High-contrast typography)
+COLOR_TEXT_MUTED = "#475569"      # Slate 600 (Secondary readable labels)
+COLOR_TEXT_DIM = "#94a3b8"        # Slate 400 (Placeholder / tertiary text)
 
-COLOR_EMERALD = "#10b981"         # Emerald 500
-COLOR_EMERALD_BG = "#064e3b"      # Deep emerald
-COLOR_EMERALD_BORDER = "#059669"  # Emerald border
+COLOR_EMERALD = "#065f46"         # Emerald 800 (Legible text on light pill)
+COLOR_EMERALD_BG = "#ecfdf5"      # Emerald 50 (Subtle pill fill)
+COLOR_EMERALD_BORDER = "#a7f3d0"  # Emerald 200 (Subtle pill outline)
 
-COLOR_AMBER = "#f59e0b"           # Amber 500
-COLOR_AMBER_BG = "#451a03"        # Deep amber
-COLOR_AMBER_BORDER = "#b45309"    # Amber border
+COLOR_AMBER = "#92400e"           # Amber 800 (Legible text on light pill)
+COLOR_AMBER_BG = "#fffbeb"        # Amber 50 (Subtle pill fill)
+COLOR_AMBER_BORDER = "#fde68a"    # Amber 200 (Subtle pill outline)
 
-COLOR_RED = "#ef4444"             # Red 500
-COLOR_RED_BG = "#381313"          # Deep red
-COLOR_RED_BORDER = "#7f1d1d"      # Red border
-COLOR_RED_TEXT = "#fca5a5"        # Soft red text
+COLOR_RED = "#dc2626"             # Red 600 (Danger action)
+COLOR_RED_BG = "#fef2f2"          # Red 50 (Danger hover fill)
+COLOR_RED_BORDER = "#fca5a5"      # Red 300 (Danger hover border)
+COLOR_RED_TEXT = "#b91c1c"        # Red 700 (Danger text)
 
-COLOR_BLUE_BTN = "#2563eb"        # Blue 600
-COLOR_BLUE_HOVER = "#3b82f6"      # Blue 500
+COLOR_BLUE_BTN = "#2563eb"        # Blue 600 (Primary action)
+COLOR_BLUE_HOVER = "#1d4ed8"      # Blue 700
 
 
 # ------------------------------------------------------------------------------
@@ -133,17 +133,17 @@ class AnimatedToggle(QWidget):
         r = h / 2.0
 
         if not self._enabled:
-            bg = QColor("#162033")
-            border = QColor("#1e293b")
-            thumb = QColor("#475569")
+            bg = QColor("#e2e8f0")
+            border = QColor("#cbd5e1")
+            thumb = QColor("#94a3b8")
         elif self._checked:
-            bg = QColor(COLOR_EMERALD)
-            border = QColor(COLOR_EMERALD_BORDER)
+            bg = QColor("#10b981")
+            border = QColor("#059669")
             thumb = QColor("#ffffff")
         else:
-            bg = QColor("#1e293b")
-            border = QColor("#334155")
-            thumb = QColor("#94a3b8")
+            bg = QColor("#e2e8f0")
+            border = QColor("#cbd5e1")
+            thumb = QColor("#ffffff")
 
         p.setPen(QPen(border, 1.2))
         p.setBrush(QBrush(bg))
@@ -157,23 +157,43 @@ class AnimatedToggle(QWidget):
         cx = x_left + (x_right - x_left) * self._position
         cy = r
 
-        p.setPen(Qt.PenStyle.NoPen)
+        # Clean subtle outline/shadow for thumb in light mode
+        p.setPen(QPen(QColor(0, 0, 0, 35), 1.0))
         p.setBrush(QBrush(thumb))
         p.drawEllipse(int(cx - tr), int(cy - tr), int(tr * 2), int(tr * 2))
 
 
 # ------------------------------------------------------------------------------
-# Clickable ComboBox with Double-Click Copy
+# Clickable ComboBox with Double-Click Copy & Modern Vector Chevron
 # ------------------------------------------------------------------------------
 class PortComboBox(QComboBox):
     """
-    @brief Custom ComboBox that copies active port path on double-click.
+    @brief Custom ComboBox that copies active port path on double-click
+           and renders a crisp, modern anti-aliased vector chevron.
     """
     doubleClicked = pyqtSignal()
 
     def mouseDoubleClickEvent(self, event):
         self.doubleClicked.emit()
         super().mouseDoubleClickEvent(event)
+
+    def paintEvent(self, event):
+        """
+        @brief Paint custom drop-down combobox with anti-aliased vector chevron.
+        @param event Paint event.
+        """
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(QPen(QColor("#64748b"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+
+        x = self.width() - 18
+        y = self.height() / 2 - 2
+        path = QPainterPath()
+        path.moveTo(x - 4, y)
+        path.lineTo(x, y + 4)
+        path.lineTo(x + 4, y)
+        p.drawPath(path)
 
 
 # ------------------------------------------------------------------------------
@@ -270,83 +290,87 @@ class UARTShieldApp(QWidget):
         self.setFixedSize(self.WINDOW_WIDTH, self.HEIGHT_COLLAPSED)
         self._center_on_screen()
 
-        # Comprehensive Modern Dark QSS Theme
+        # Comprehensive Modern Light QSS Theme
         self.setStyleSheet("""
             QWidget {
-                background-color: #0b0f19;
-                color: #f8fafc;
+                background-color: #f8fafc;
+                color: #0f172a;
                 font-family: 'SF Pro Display', 'Inter', 'Ubuntu', 'DejaVu Sans', sans-serif;
             }
             QFrame#card {
-                background-color: #131b2e;
-                border: 1px solid #25334d;
+                background-color: #ffffff;
+                border: 1px solid #e2e8f0;
                 border-radius: 12px;
             }
             QComboBox {
-                background-color: #131b2e;
-                border: 1px solid #25334d;
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
                 border-radius: 8px;
                 padding: 6px 12px;
+                padding-right: 28px;
                 font-size: 13px;
-                color: #f8fafc;
+                color: #0f172a;
             }
             QComboBox:hover {
                 border: 1px solid #3b82f6;
             }
+            QComboBox::drop-down {
+                border: none;
+            }
             QComboBox QAbstractItemView {
-                background-color: #131b2e;
-                border: 1px solid #25334d;
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
                 border-radius: 8px;
                 selection-background-color: #2563eb;
                 selection-color: #ffffff;
-                color: #f8fafc;
+                color: #0f172a;
                 padding: 4px;
                 outline: none;
             }
             QPushButton#btn_scan {
-                background-color: #192235;
-                color: #f8fafc;
-                border: 1px solid #25334d;
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
                 border-radius: 6px;
                 padding: 4px 10px;
                 font-size: 11px;
                 font-weight: bold;
             }
             QPushButton#btn_scan:hover {
-                background-color: #24314c;
+                background-color: #f1f5f9;
                 border: 1px solid #3b82f6;
             }
             QPushButton#btn_patch {
-                background-color: #192235;
-                color: #f8fafc;
-                border: 1px solid #25334d;
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
                 border-radius: 7px;
                 padding: 8px;
                 font-size: 12px;
                 font-weight: bold;
             }
             QPushButton#btn_patch:hover {
-                background-color: #24314c;
+                background-color: #f1f5f9;
                 border: 1px solid #3b82f6;
             }
             QPushButton#btn_patch:disabled, QPushButton#btn_restore:disabled {
-                background-color: #111726;
-                color: #475569;
-                border: 1px solid #1e293b;
+                background-color: #f1f5f9;
+                color: #94a3b8;
+                border: 1px solid #e2e8f0;
             }
             QPushButton#btn_restore {
-                background-color: #192235;
-                color: #94a3b8;
-                border: 1px solid #25334d;
+                background-color: #ffffff;
+                color: #475569;
+                border: 1px solid #cbd5e1;
                 border-radius: 7px;
                 padding: 8px;
                 font-size: 12px;
                 font-weight: bold;
             }
             QPushButton#btn_restore:hover {
-                background-color: #381313;
+                background-color: #fef2f2;
                 border: 1px solid #ef4444;
-                color: #fca5a5;
+                color: #dc2626;
             }
             QPushButton#btn_install {
                 background-color: #2563eb;
@@ -358,17 +382,17 @@ class UARTShieldApp(QWidget):
                 font-weight: bold;
             }
             QPushButton#btn_install:hover {
-                background-color: #3b82f6;
+                background-color: #1d4ed8;
             }
             QPushButton#btn_install:disabled {
-                background-color: #1a2336;
-                color: #475569;
-                border: 1px solid #25334d;
+                background-color: #e2e8f0;
+                color: #94a3b8;
+                border: 1px solid #cbd5e1;
             }
             QPlainTextEdit {
-                background-color: #060911;
-                color: #94a3b8;
-                border: 1px solid #1e293b;
+                background-color: #f8fafc;
+                color: #334155;
+                border: 1px solid #cbd5e1;
                 border-radius: 8px;
                 padding: 6px;
                 font-family: 'SF Mono', 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
@@ -410,12 +434,12 @@ class UARTShieldApp(QWidget):
         hdr.setSpacing(8)
 
         lbl_title = QLabel("UART Shield")
-        lbl_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #f8fafc;")
+        lbl_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #0f172a;")
         hdr.addWidget(lbl_title)
 
         lbl_kernel = QLabel("KERNEL")
         lbl_kernel.setStyleSheet(
-            "background: #162033; color: #94a3b8; font-size: 10px; font-weight: bold; "
+            "background: #e2e8f0; color: #475569; font-size: 10px; font-weight: bold; "
             "border-radius: 4px; padding: 2px 6px; font-family: monospace;"
         )
         hdr.addWidget(lbl_kernel)
@@ -437,12 +461,12 @@ class UARTShieldApp(QWidget):
         # 2b. Port In-Use Warning Chip (Hidden by default)
         self.port_warning = QFrame()
         self.port_warning.setStyleSheet(
-            "background-color: #381f08; border: 1px solid #b45309; border-radius: 6px; padding: 3px 6px;"
+            "background-color: #fffbeb; border: 1px solid #f59e0b; border-radius: 6px; padding: 3px 6px;"
         )
         pw_layout = QHBoxLayout(self.port_warning)
         pw_layout.setContentsMargins(4, 2, 4, 2)
         self.lbl_port_warning = QLabel("⚠ Port in use")
-        self.lbl_port_warning.setStyleSheet("color: #fbbf24; font-size: 11px; font-weight: bold; background: transparent; border: none;")
+        self.lbl_port_warning.setStyleSheet("color: #b45309; font-size: 11px; font-weight: bold; background: transparent; border: none;")
         pw_layout.addWidget(self.lbl_port_warning)
         self.port_warning.hide()
         root_layout.addWidget(self.port_warning)
@@ -458,7 +482,7 @@ class UARTShieldApp(QWidget):
         card_top = QHBoxLayout()
         self.lbl_pill = QLabel("Checking")
         self.lbl_pill.setStyleSheet(
-            "background: #1a2336; color: #94a3b8; border: 1px solid #2e3d5b; "
+            "background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; "
             "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
         )
         card_top.addWidget(self.lbl_pill)
@@ -471,7 +495,7 @@ class UARTShieldApp(QWidget):
 
         # Subtitle description
         self.lbl_desc = QLabel("Checking serial DTR/RTS pin state...")
-        self.lbl_desc.setStyleSheet("color: #94a3b8; font-size: 12px; background: transparent; border: none;")
+        self.lbl_desc.setStyleSheet("color: #475569; font-size: 12px; background: transparent; border: none;")
         card_layout.addWidget(self.lbl_desc)
 
         # Prominent Install Button (Only visible if Stock Driver)
@@ -510,19 +534,19 @@ class UARTShieldApp(QWidget):
         # 6. Footer Row (Status / Spinner + Log Toggle + Clear)
         ftr = QHBoxLayout()
         self.lbl_footer = QLabel("Ready • Space to toggle")
-        self.lbl_footer.setStyleSheet("color: #64748b; font-size: 11px;")
+        self.lbl_footer.setStyleSheet("color: #94a3b8; font-size: 11px;")
         ftr.addWidget(self.lbl_footer)
         ftr.addStretch()
 
         self.btn_clear = QPushButton("Clear")
-        self.btn_clear.setStyleSheet("background: transparent; color: #64748b; font-size: 11px; border: none;")
+        self.btn_clear.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px; border: none;")
         self.btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clear.clicked.connect(self.txt_log.clear)
         self.btn_clear.hide()
         ftr.addWidget(self.btn_clear)
 
         self.btn_log = QPushButton("Log ▸")
-        self.btn_log.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px; font-weight: bold; border: none;")
+        self.btn_log.setStyleSheet("background: transparent; color: #475569; font-size: 11px; font-weight: bold; border: none;")
         self.btn_log.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_log.clicked.connect(self._toggle_log_drawer)
         ftr.addWidget(self.btn_log)
@@ -546,10 +570,10 @@ class UARTShieldApp(QWidget):
         @param delay_ms Duration in milliseconds.
         """
         self.lbl_footer.setText(message)
-        self.lbl_footer.setStyleSheet("color: #10b981; font-size: 11px; font-weight: bold;")
+        self.lbl_footer.setStyleSheet("color: #059669; font-size: 11px; font-weight: bold;")
         QTimer.singleShot(delay_ms, lambda: (
             self.lbl_footer.setText("Ready • Space to toggle"),
-            self.lbl_footer.setStyleSheet("color: #64748b; font-size: 11px;")
+            self.lbl_footer.setStyleSheet("color: #94a3b8; font-size: 11px;")
         ))
 
     def _on_space_pressed(self):
@@ -606,7 +630,7 @@ class UARTShieldApp(QWidget):
         else:
             self.spinner_timer.stop()
             self.lbl_footer.setText(task_name if task_name else "Ready • Space to toggle")
-            self.lbl_footer.setStyleSheet("color: #64748b; font-size: 11px;")
+            self.lbl_footer.setStyleSheet("color: #94a3b8; font-size: 11px;")
 
     def _step_spinner(self):
         """
@@ -616,7 +640,7 @@ class UARTShieldApp(QWidget):
             frame = self.SPINNER_FRAMES[self.spinner_idx % len(self.SPINNER_FRAMES)]
             self.spinner_idx += 1
             self.lbl_footer.setText(f"{frame} {self.active_task_label}...")
-            self.lbl_footer.setStyleSheet(f"color: {COLOR_BLUE_HOVER}; font-size: 11px; font-weight: bold;")
+            self.lbl_footer.setStyleSheet(f"color: {COLOR_BLUE_BTN}; font-size: 11px; font-weight: bold;")
 
     # --------------------------------------------------------------------------
     # Device Scanning & State Resolution
@@ -783,7 +807,7 @@ class UARTShieldApp(QWidget):
         self.current_protected = False
         self.lbl_pill.setText("△ Stock Driver")
         self.lbl_pill.setStyleSheet(
-            "background: #1a2336; color: #94a3b8; border: 1px solid #2e3d5b; "
+            "background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; "
             "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
         )
         self.lbl_desc.setText(f"'{driver}' unpatched. Install shield to block resets.")
@@ -803,7 +827,7 @@ class UARTShieldApp(QWidget):
         self.port_warning.hide()
         self.lbl_pill.setText("No Device")
         self.lbl_pill.setStyleSheet(
-            "background: #131926; color: #64748b; border: 1px solid #1e293b; "
+            "background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; "
             "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
         )
         self.lbl_desc.setText("Connect a USB-UART adapter or gimbal.")

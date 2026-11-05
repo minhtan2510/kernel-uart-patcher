@@ -73,6 +73,20 @@
   - Background asynchronous command execution via `QThread` and Qt signals/slots.
 * **Consequences:** Commercial-grade modern desktop aesthetics, fluid animations, crisp typography, and zero lag.
 
+### [2026-11-05] ADR-08: Clean Minimalist Light Mode Theme & Custom Vector Controls
+* **Context:** User requested a Light Theme ("Đổi theme của giao diện thành Light cho dễ nhìn") to enhance daylight legibility and visual comfort.
+* **Decision:**
+  - Modern Minimalist Light palette inspired by Tailwind Slate / Zinc:
+    - Base background: Slate-50 (`#f8fafc`) to eliminate harsh 100% white glare.
+    - Card surfaces & inputs: Crisp pure white (`#ffffff`) with Slate-200 (`#e2e8f0`) and Slate-300 (`#cbd5e1`) borders.
+    - Typography: Slate-900 (`#0f172a`) for crisp contrast; Slate-600 (`#475569`) for secondary metadata; Slate-400 (`#94a3b8`) for hints.
+    - Status Pills:
+      - Shield Active: Emerald-50 (`#ecfdf5`), border Emerald-200 (`#a7f3d0`), text Emerald-800 (`#065f46`).
+      - Shield Inactive: Amber-50 (`#fffbeb`), border Amber-200 (`#fde68a`), text Amber-800 (`#92400e`).
+      - Stock Driver: Slate-100 (`#f1f5f9`), border Slate-300 (`#cbd5e1`), text Slate-600 (`#475569`).
+    - Custom Port ComboBox Chevron: Replaced legacy Fusion 3D beveled arrow with custom antialiased vector chevron (`QPainterPath` with round cap/join in `PortComboBox.paintEvent`).
+* **Consequences:** Pristine, modern light theme with superior daylight readability and clean vector aesthetics.
+
 ---
 
 ## 3. Known Gotchas & Constraints
