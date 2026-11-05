@@ -95,6 +95,16 @@
   - Re-badged header tag from `KERNEL` to `DTR/RTS` to eliminate lexical redundancy (`Kernel UART Patcher • DTR/RTS`).
 * **Consequences:** Accurate technical branding reflecting its kernel-level out-of-tree patching capabilities.
 
+### [2026-11-05] ADR-10: Expanded Window Layout & Permanent Activity Log
+* **Context:** User requested slightly increasing window dimensions and making the activity log view permanent by default, removing the collapsible drawer toggle.
+* **Decision:**
+  - Upgraded window dimensions to `420x500` px (providing room for ~55-character log lines without wrapping).
+  - Made `QPlainTextEdit` activity log permanently visible.
+  - Removed log toggle button (`Log ▸` / `Log ▾`), collapsible state variable, and `Ctrl+L` shortcut.
+  - Simplified footer to status / spinner on left, `Clear` button on right.
+  - Added modern minimalist 6px rounded scrollbar styling (`QScrollBar:vertical`) to eliminate bulky default Fusion scrollbars.
+* **Consequences:** Instant visibility into kernel module status, unbind operations, and compiler output without manual expansion; clean, stable window layout without geometric shifting.
+
 ---
 
 ## 3. Known Gotchas & Constraints

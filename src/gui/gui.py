@@ -250,9 +250,8 @@ class UARTShieldApp(QWidget):
     """
     @brief Ultra-compact modern minimalist control widget for serial DTR/RTS reset shield.
     """
-    WINDOW_WIDTH = 360
-    HEIGHT_COLLAPSED = 315
-    HEIGHT_EXPANDED = 465
+    WINDOW_WIDTH = 420
+    WINDOW_HEIGHT = 500
 
     SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -261,7 +260,6 @@ class UARTShieldApp(QWidget):
         self.devices = []
         self.is_operating = False
         self.is_port_locked = False
-        self.log_expanded = False
         self.current_protected = False
         self.current_param_exists = False
         self.active_task_label = ""
@@ -287,7 +285,7 @@ class UARTShieldApp(QWidget):
         @brief Configure window title, geometry, and hardware styling.
         """
         self.setWindowTitle("Kernel UART Patcher")
-        self.setFixedSize(self.WINDOW_WIDTH, self.HEIGHT_COLLAPSED)
+        self.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
         self._center_on_screen()
 
         # Comprehensive Modern Light QSS Theme
@@ -398,6 +396,29 @@ class UARTShieldApp(QWidget):
                 font-family: 'SF Mono', 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
                 font-size: 11px;
             }
+            QScrollBar:vertical {
+                border: none;
+                background: transparent;
+                width: 6px;
+                margin: 2px 2px 2px 0px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                min-height: 24px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #94a3b8;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+                border: none;
+                background: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
         """)
 
     def _center_on_screen(self):
@@ -408,7 +429,7 @@ class UARTShieldApp(QWidget):
         if screen:
             geo = screen.availableGeometry()
             x = max(0, (geo.width() - self.WINDOW_WIDTH) // 2)
-            y = max(0, (geo.height() - self.HEIGHT_COLLAPSED) // 2)
+            y = max(0, (geo.height() - self.WINDOW_HEIGHT) // 2)
             self.move(x, y)
 
     def _setup_shortcuts(self):
@@ -418,7 +439,6 @@ class UARTShieldApp(QWidget):
         QShortcut(QKeySequence(Qt.Key.Key_Space), self, self._on_space_pressed)
         QShortcut(QKeySequence("Ctrl+R"), self, self.refresh_devices)
         QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.refresh_devices)
-        QShortcut(QKeySequence("Ctrl+L"), self, self._toggle_log_drawer)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.close)
 
     def _build_ui(self):
@@ -525,13 +545,12 @@ class UARTShieldApp(QWidget):
         actions.addWidget(self.btn_restore)
         root_layout.addLayout(actions)
 
-        # 5. Activity Log Drawer (Collapsible)
+        # 5. Activity Log (Always Visible)
         self.txt_log = QPlainTextEdit()
         self.txt_log.setReadOnly(True)
-        self.txt_log.hide()
         root_layout.addWidget(self.txt_log)
 
-        # 6. Footer Row (Status / Spinner + Log Toggle + Clear)
+        # 6. Footer Row (Status / Spinner + Clear Button)
         ftr = QHBoxLayout()
         self.lbl_footer = QLabel("Ready • Space to toggle")
         self.lbl_footer.setStyleSheet("color: #94a3b8; font-size: 11px;")
@@ -539,17 +558,10 @@ class UARTShieldApp(QWidget):
         ftr.addStretch()
 
         self.btn_clear = QPushButton("Clear")
-        self.btn_clear.setStyleSheet("background: transparent; color: #94a3b8; font-size: 11px; border: none;")
+        self.btn_clear.setStyleSheet("background: transparent; color: #64748b; font-size: 11px; border: none; padding: 2px 4px;")
         self.btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clear.clicked.connect(self.txt_log.clear)
-        self.btn_clear.hide()
         ftr.addWidget(self.btn_clear)
-
-        self.btn_log = QPushButton("Log ▸")
-        self.btn_log.setStyleSheet("background: transparent; color: #475569; font-size: 11px; font-weight: bold; border: none;")
-        self.btn_log.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_log.clicked.connect(self._toggle_log_drawer)
-        ftr.addWidget(self.btn_log)
 
         root_layout.addLayout(ftr)
 
@@ -584,22 +596,6 @@ class UARTShieldApp(QWidget):
             new_state = not self.switch.isChecked()
             self.switch.setChecked(new_state, animated=True)
             self._on_switch_toggled(new_state)
-
-    def _toggle_log_drawer(self):
-        """
-        @brief Toggle collapsible activity log drawer and adjust window height.
-        """
-        self.log_expanded = not self.log_expanded
-        if self.log_expanded:
-            self.btn_log.setText("Log ▾")
-            self.btn_clear.show()
-            self.txt_log.show()
-            self.setFixedHeight(self.HEIGHT_EXPANDED)
-        else:
-            self.btn_log.setText("Log ▸")
-            self.btn_clear.hide()
-            self.txt_log.hide()
-            self.setFixedHeight(self.HEIGHT_COLLAPSED)
 
     def log(self, message: str):
         """
@@ -861,9 +857,6 @@ class UARTShieldApp(QWidget):
         """
         if self.is_operating:
             return
-
-        if not self.log_expanded:
-            self._toggle_log_drawer()
 
         self.set_operating(True, task_name)
         self.log(f"\n[ACTION] {task_name}")
