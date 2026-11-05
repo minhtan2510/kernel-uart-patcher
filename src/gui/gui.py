@@ -17,7 +17,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CORE_SCRIPT = os.path.join(SCRIPT_DIR, "uart_kernel_patch.sh")
+CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
 
 # ------------------------------------------------------------------------------
 # Modern Minimalist Palette (Tailwind Slate / Zinc inspired)

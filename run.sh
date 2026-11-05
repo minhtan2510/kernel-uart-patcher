@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# run_gui.sh — Launcher for UART DTR/RTS Control Panel GUI
+# run.sh — Entry Point Launcher for UART Shield GUI
 # ==============================================================================
 
 set -euo pipefail
@@ -14,5 +14,5 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
-# Launch GUI
-exec python3 "$SCRIPT_DIR/gui.py" "$@"
+# Launch GUI from src/gui
+exec python3 "$SCRIPT_DIR/src/gui/gui.py" "$@"
