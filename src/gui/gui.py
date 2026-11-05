@@ -240,6 +240,7 @@ class UARTShieldApp(QWidget):
         super().__init__()
         self.devices = []
         self.is_operating = False
+        self.is_port_locked = False
         self.log_expanded = False
         self.current_protected = False
         self.current_param_exists = False
@@ -328,6 +329,11 @@ class UARTShieldApp(QWidget):
                 background-color: #24314c;
                 border: 1px solid #3b82f6;
             }
+            QPushButton#btn_patch:disabled, QPushButton#btn_restore:disabled {
+                background-color: #111726;
+                color: #475569;
+                border: 1px solid #1e293b;
+            }
             QPushButton#btn_restore {
                 background-color: #192235;
                 color: #94a3b8;
@@ -353,6 +359,11 @@ class UARTShieldApp(QWidget):
             }
             QPushButton#btn_install:hover {
                 background-color: #3b82f6;
+            }
+            QPushButton#btn_install:disabled {
+                background-color: #1a2336;
+                color: #475569;
+                border: 1px solid #25334d;
             }
             QPlainTextEdit {
                 background-color: #060911;
@@ -583,9 +594,9 @@ class UARTShieldApp(QWidget):
         self.active_task_label = task_name
 
         self.btn_scan.setEnabled(not operating)
-        self.btn_patch.setEnabled(not operating)
-        self.btn_restore.setEnabled(not operating)
-        self.btn_install.setEnabled(not operating)
+        self.btn_patch.setEnabled(not operating and not self.is_port_locked)
+        self.btn_restore.setEnabled(not operating and not self.is_port_locked)
+        self.btn_install.setEnabled(not operating and not self.is_port_locked)
         self.combo_ports.setEnabled(not operating)
         self.switch.setEnabled(not operating and self.current_param_exists)
 
@@ -702,10 +713,22 @@ class UARTShieldApp(QWidget):
         # Check process lock
         lock_pid, lock_name = self._check_port_lock(port)
         if lock_pid:
+            self.is_port_locked = True
+            lock_msg = f"Port is in use by {lock_name} (PID {lock_pid}). Close the application first."
             self.lbl_port_warning.setText(f"⚠ Port in use: {lock_name} (PID {lock_pid})")
             self.port_warning.show()
+            self.btn_install.setEnabled(False)
+            self.btn_install.setToolTip(lock_msg)
+            self.btn_patch.setEnabled(False)
+            self.btn_patch.setToolTip(lock_msg)
+            self.btn_restore.setEnabled(False)
+            self.btn_restore.setToolTip(lock_msg)
         else:
+            self.is_port_locked = False
             self.port_warning.hide()
+            self.btn_install.setToolTip("")
+            self.btn_patch.setToolTip("")
+            self.btn_restore.setToolTip("")
 
         # Check kernel module parameter
         param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts"
@@ -747,8 +770,9 @@ class UARTShieldApp(QWidget):
         else:
             self._set_stock_state(driver)
 
-        self.btn_patch.setEnabled(True)
-        self.btn_restore.setEnabled(True)
+        if not self.is_port_locked and not self.is_operating:
+            self.btn_patch.setEnabled(True)
+            self.btn_restore.setEnabled(True)
 
     def _set_stock_state(self, driver: str):
         """
@@ -767,6 +791,7 @@ class UARTShieldApp(QWidget):
         self.switch.setEnabled(False)
 
         self.btn_install.show()
+        self.btn_install.setEnabled(not self.is_port_locked and not self.is_operating)
         self.btn_patch.setText("Patch Driver")
 
     def _set_no_device_state(self):
