@@ -12,6 +12,8 @@ import sys
 import subprocess
 import re
 import html
+import ctypes
+import gc
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
@@ -29,6 +31,18 @@ from PyQt6.QtGui import (
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
+
+
+def _trim_memory():
+    """
+    @brief Reclaim unreferenced heap pages back to the OS via glibc malloc_trim.
+    """
+    try:
+        gc.collect()
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        pass
 
 # ------------------------------------------------------------------------------
 # Modern Minimalist Light Palette (Tailwind Slate / Zinc inspired)
@@ -311,6 +325,7 @@ class UARTShieldApp(QWidget):
     def __init__(self):
         super().__init__()
         self.devices = []
+        self._last_raw_ports = None
         self.is_operating = False
         self.is_port_locked = False
         self.current_protected = False
@@ -579,6 +594,7 @@ class UARTShieldApp(QWidget):
         # 5. Activity Log (Always Visible)
         self.txt_log = QPlainTextEdit()
         self.txt_log.setReadOnly(True)
+        self.txt_log.setMaximumBlockCount(1000)
         root_layout.addWidget(self.txt_log)
 
         # 6. Footer Row (Status / Spinner + Clear Button)
@@ -784,6 +800,78 @@ class UARTShieldApp(QWidget):
     # Device Scanning & State Resolution
     # --------------------------------------------------------------------------
 
+    @staticmethod
+    def _get_port_metadata(port_name: str) -> tuple[str, str]:
+        """
+        @brief Extract driver module and device description with zero subprocess forks.
+        @param port_name e.g. "ttyUSB0" or "ttyACM0"
+        @return Tuple of (driver_name, description)
+        """
+        driver = "unknown"
+        desc = ""
+
+        # 1. Driver module via sysfs symlink
+        mod_link = f"/sys/class/tty/{port_name}/device/driver/module"
+        if os.path.islink(mod_link):
+            try:
+                driver = os.path.basename(os.path.realpath(mod_link))
+            except Exception:
+                pass
+
+        # 2. Fast udev runtime database lookup (/run/udev/data/c<major>:<minor>)
+        dev_stat_path = f"/sys/class/tty/{port_name}/dev"
+        if os.path.isfile(dev_stat_path):
+            try:
+                with open(dev_stat_path, "r") as f:
+                    maj_min = f.read().strip()
+                udev_file = f"/run/udev/data/c{maj_min}"
+                if os.path.isfile(udev_file):
+                    with open(udev_file, "r", errors="ignore") as f:
+                        for line in f:
+                            if line.startswith("E:ID_MODEL_FROM_DATABASE="):
+                                desc = line.split("=", 1)[1].strip()
+                                break
+                            elif line.startswith("E:ID_MODEL=") and not desc:
+                                desc = line.split("=", 1)[1].strip().replace("_", " ")
+            except Exception:
+                pass
+
+        # 3. Fallback to sysfs USB product descriptor
+        if not desc:
+            for candidate in (
+                f"/sys/class/tty/{port_name}/device/../product",
+                f"/sys/class/tty/{port_name}/device/../../product",
+            ):
+                if os.path.isfile(candidate):
+                    try:
+                        with open(candidate, "r") as f:
+                            val = f.read().strip()
+                        if val:
+                            desc = val
+                            break
+                    except Exception:
+                        pass
+
+        # 4. Fallback to udevadm if udev database is not accessible
+        if not desc:
+            try:
+                out = subprocess.check_output(
+                    ["udevadm", "info", "-q", "property", "-n", f"/dev/{port_name}"],
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    timeout=1
+                )
+                for line in out.splitlines():
+                    if line.startswith("ID_MODEL_FROM_DATABASE="):
+                        desc = line.split("=", 1)[1].strip()
+                        break
+                    elif line.startswith("ID_MODEL=") and not desc:
+                        desc = line.split("=", 1)[1].strip().replace("_", " ")
+            except Exception:
+                pass
+
+        return driver, desc
+
     def refresh_devices(self):
         """
         @brief Scan available serial ports and query driver parameters with change detection.
@@ -791,48 +879,33 @@ class UARTShieldApp(QWidget):
         if self.is_operating:
             return
 
-        scanned = []
         try:
-            ports = [
-                f"/dev/{f}"
+            raw_ports = [
+                f
                 for f in os.listdir("/dev")
                 if f.startswith("ttyUSB") or f.startswith("ttyACM")
             ]
-            # Prioritize physical USB-UART bridges (ttyUSB) before ACM/modem gadgets (ttyACM)
-            ports.sort(key=lambda p: (0 if "ttyUSB" in p else 1, p))
-
-            for port in ports:
-                port_name = os.path.basename(port)
-                driver = "unknown"
-                desc = ""
-                mod_link = f"/sys/class/tty/{port_name}/device/driver/module"
-                if os.path.islink(mod_link):
-                    driver = os.path.basename(os.path.realpath(mod_link))
-
-                try:
-                    out = subprocess.check_output(
-                        ["udevadm", "info", "-q", "property", "-n", port],
-                        stderr=subprocess.DEVNULL,
-                        text=True
-                    )
-                    for line in out.splitlines():
-                        if line.startswith("ID_MODEL_FROM_DATABASE="):
-                            desc = line.split("=", 1)[1].strip()
-                            break
-                        elif line.startswith("ID_MODEL=") and not desc:
-                            desc = line.split("=", 1)[1].strip().replace("_", " ")
-                except Exception:
-                    pass
-
-                scanned.append({"port": port, "driver": driver, "desc": desc})
         except Exception as e:
-            self.log(f"Error scanning ports: {e}")
+            self.log(f"Error scanning /dev: {e}")
+            raw_ports = []
 
-        # Only rebuild dropdown if physical ports or drivers actually changed
-        curr_sig = [(d["port"], d["driver"], d.get("desc", "")) for d in self.devices]
-        new_sig = [(d["port"], d["driver"], d.get("desc", "")) for d in scanned]
+        # Prioritize physical USB-UART bridges (ttyUSB) before ACM/modem gadgets (ttyACM)
+        raw_ports.sort(key=lambda p: (0 if "ttyUSB" in p else 1, p))
 
-        if curr_sig != new_sig:
+        # Check if physical port list actually changed
+        ports_changed = (raw_ports != getattr(self, "_last_raw_ports", None))
+
+        if ports_changed:
+            self._last_raw_ports = raw_ports
+            scanned = []
+            for port_name in raw_ports:
+                driver, desc = self._get_port_metadata(port_name)
+                scanned.append({
+                    "port": f"/dev/{port_name}",
+                    "driver": driver,
+                    "desc": desc
+                })
+
             self.devices = scanned
             current_selection = self.combo_ports.currentText()
             self.combo_ports.blockSignals(True)
@@ -849,10 +922,9 @@ class UARTShieldApp(QWidget):
                     self.combo_ports.setCurrentText(current_selection)
                 else:
                     self.combo_ports.setCurrentIndex(0)
-                self.combo_ports.blockSignals(False)
             else:
                 self.combo_ports.addItem("No serial ports detected")
-                self.combo_ports.blockSignals(False)
+            self.combo_ports.blockSignals(False)
 
         # Update driver parameters and tray status without clearing widget state
         if self.devices:
@@ -866,6 +938,10 @@ class UARTShieldApp(QWidget):
         @param port_path e.g. /dev/ttyUSB0
         @return Tuple (pid, process_name) or (None, None).
         """
+        # Skip process inspection when window is hidden in background
+        if not self.isVisible():
+            return None, None
+
         try:
             res = subprocess.run(
                 ["fuser", port_path],
@@ -1296,9 +1372,11 @@ class UARTShieldApp(QWidget):
         """
         @brief Restore, focus, and raise the main application window.
         """
+        self.refresh_timer.setInterval(3000)
         self.showNormal()
         self.activateWindow()
         self.raise_()
+        self.refresh_devices()
 
     def _quit_app(self):
         """
@@ -1319,6 +1397,8 @@ class UARTShieldApp(QWidget):
 
         event.ignore()
         self.hide()
+        self.refresh_timer.setInterval(5000)
+        _trim_memory()
 
     # --------------------------------------------------------------------------
     # Action Handlers
