@@ -233,9 +233,14 @@
     - Intercepted `closeEvent` (and `Escape` key): If system tray is available and not a forced exit, hides the window (`event.ignore()`, `self.hide()`) and displays a one-time balloon notification informing the user the app is minimized to tray.
     - If tray is unavailable on the desktop environment (e.g. headless/minimal WM), falls back gracefully to standard window close (`event.accept()`).
     - Added global shortcut `Ctrl+Q` and Tray Context Menu `Quit` to terminate the process cleanly via `_force_quit = True` and `QApplication.quit()`.
-  - Implemented dynamic 22x22 vector tray badge (`_make_tray_icon`):
-    - High-contrast rounded badge with center indicator dot visible on both dark (GNOME/Ubuntu default) and light OS top bars.
-    - Color-coded: Emerald (`#059669`) for `PATCH ACTIVE`, Amber (`#d97706`) for `PATCH INACTIVE`, Slate (`#64748b`) for `SYSTEM DEFAULT`, Light Slate (`#cbd5e1`) for `NO DEVICE`.
+  - Implemented dynamic 22x22 HiDPI vector shield emblem (`_make_tray_icon`):
+    - Scaled at 2.0 device pixel ratio (44x44 physical canvas mapped to 22x22 logical display) for razor-sharp rendering on Retina/4K/GNOME fractional scaling.
+    - Uses ergonomic Bézier curve shield silhouette (`QPainterPath.cubicTo`) delivering instant visual recognition of the hardware reset shield.
+    - Semantic internal iconography:
+      - `PATCH ACTIVE`: Emerald fill (`#10b981`, border `#047857`) with crisp white checkmark (`✓`) indicating active hardware reset protection.
+      - `PATCH INACTIVE`: Amber fill (`#f59e0b`, border `#b45309`) with white horizontal pause/bypass bar (`—`) denoting bootloader/flash pass-through mode.
+      - `SYSTEM DEFAULT`: Slate fill (`#94a3b8`, border `#475569`) with white warning exclamation mark (`!`) signifying unpatched factory driver.
+      - `NO DEVICE`: Dotted outline shield (`#94a3b8`, `Qt.PenStyle.DashLine`) with translucent fill for standby/disconnected state.
   - Implemented Tray Context Menu:
     - Header: Displays active device, port, and driver state (disabled informational row).
     - Quick Toggle: Checkable `Block Reset Pins (Patch Active)` action that writes instantly to sysfs parameter (`/sys/module/<driver>/parameters/disable_dtr_rts`) without elevating unless needed, and emits desktop balloon toast when toggled while window is hidden.

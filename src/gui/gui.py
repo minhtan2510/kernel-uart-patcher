@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
-    QEasingCurve, pyqtProperty, QSize
+    QEasingCurve, pyqtProperty, QSize, QPointF
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut,
@@ -1069,45 +1069,73 @@ class UARTShieldApp(QWidget):
 
     def _make_tray_icon(self, state: str) -> QIcon:
         """
-        @brief Render a high-contrast 22x22 vector tray icon matching current driver state.
+        @brief Render a modern, high-contrast HiDPI vector shield tray icon.
         @param state State string: 'active', 'inactive', 'default', or 'none'.
-        @return QIcon instance with rendered badge.
+        @return QIcon instance with rendered vector shield emblem.
         """
-        size = 22
-        pixmap = QPixmap(size, size)
+        # Render at 2x physical resolution with 2.0 devicePixelRatio for crisp HiDPI display
+        scale = 2.0
+        logical_size = 22
+        pixmap = QPixmap(int(logical_size * scale), int(logical_size * scale))
+        pixmap.setDevicePixelRatio(scale)
         pixmap.fill(Qt.GlobalColor.transparent)
 
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        # 1. Vector Shield Geometry (smooth ergonomic silhouette)
+        shield_path = QPainterPath()
+        shield_path.moveTo(11.0, 1.8)
+        shield_path.lineTo(17.8, 3.4)
+        shield_path.cubicTo(18.2, 3.5, 18.5, 4.0, 18.5, 4.6)
+        shield_path.lineTo(18.5, 10.5)
+        shield_path.cubicTo(18.5, 15.2, 15.5, 18.4, 11.0, 20.5)
+        shield_path.cubicTo(6.5, 18.4, 3.5, 15.2, 3.5, 10.5)
+        shield_path.lineTo(3.5, 4.6)
+        shield_path.cubicTo(3.5, 4.0, 3.8, 3.5, 4.2, 3.4)
+        shield_path.closeSubpath()
+
+        # 2. Render emblem based on driver shield state
         if state == "active":
-            bg_color = QColor("#059669")    # Emerald 600
-            dot_color = QColor("#ffffff")   # Crisp white indicator
-            ring_color = QColor("#10b981")  # Emerald 500
+            # Vivid Emerald shield with white checkmark (Resets Shielded)
+            painter.setPen(QPen(QColor("#047857"), 1.2))
+            painter.setBrush(QBrush(QColor("#10b981")))
+            painter.drawPath(shield_path)
+
+            checkmark = QPainterPath()
+            checkmark.moveTo(7.5, 9.8)
+            checkmark.lineTo(10.0, 12.5)
+            checkmark.lineTo(14.5, 7.5)
+            painter.setPen(QPen(QColor("#ffffff"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(checkmark)
+
         elif state == "inactive":
-            bg_color = QColor("#d97706")    # Amber 600
-            dot_color = QColor("#ffffff")
-            ring_color = QColor("#f59e0b")  # Amber 500
+            # Warm Amber shield with white bypass bar (Pass-Through / Flash mode)
+            painter.setPen(QPen(QColor("#b45309"), 1.2))
+            painter.setBrush(QBrush(QColor("#f59e0b")))
+            painter.drawPath(shield_path)
+
+            painter.setPen(QPen(QColor("#ffffff"), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(QPointF(7.5, 10.5), QPointF(14.5, 10.5))
+
         elif state == "default":
-            bg_color = QColor("#64748b")    # Slate 500
-            dot_color = QColor("#cbd5e1")   # Slate 300
-            ring_color = QColor("#94a3b8")  # Slate 400
+            # Slate shield with warning exclamation mark (Unpatched stock driver)
+            painter.setPen(QPen(QColor("#475569"), 1.2))
+            painter.setBrush(QBrush(QColor("#94a3b8")))
+            painter.drawPath(shield_path)
+
+            painter.setPen(QPen(QColor("#ffffff"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(QPointF(11.0, 6.5), QPointF(11.0, 10.5))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor("#ffffff")))
+            painter.drawEllipse(QPointF(11.0, 13.0), 1.1, 1.1)
+
         else:
-            bg_color = QColor("#cbd5e1")    # Slate 300
-            dot_color = QColor("#94a3b8")   # Slate 400
-            ring_color = QColor("#e2e8f0")
-
-        # Draw rounded badge base for high contrast across dark and light OS panels
-        painter.setPen(QPen(ring_color, 1.2))
-        painter.setBrush(QBrush(bg_color))
-        painter.drawRoundedRect(1, 1, size - 2, size - 2, 5.0, 5.0)
-
-        # Draw center indicator dot
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QBrush(dot_color))
-        radius = 3.5
-        center = size / 2.0
-        painter.drawEllipse(int(center - radius), int(center - radius), int(radius * 2), int(radius * 2))
+            # Subtle dashed outline shield for disconnected state
+            painter.setPen(QPen(QColor("#94a3b8"), 1.2, Qt.PenStyle.DashLine))
+            painter.setBrush(QBrush(QColor(241, 245, 249, 160)))
+            painter.drawPath(shield_path)
 
         painter.end()
         return QIcon(pixmap)
