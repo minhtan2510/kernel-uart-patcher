@@ -183,6 +183,17 @@
   - Scaled animated toggle switch to `48x26` and centered both widgets vertically via `Qt.AlignmentFlag.AlignVCenter`.
 * **Consequences:** Immediately draws user attention to the current driver protection state while maintaining strict light-theme harmony.
 
+### ADR-17: Self-Healing Stock Driver Recovery with Dynamic DPKG/APT Resolution
+* **Status:** Accepted (2026-11-06)
+* **Context:** If the backup directory (`/var/backups/uart_dtr_patch/`) or `.orig` file is manually removed by a user or cleanup script, `cmd_restore` would fail with an unrecoverable `die` abort.
+* **Decision:**
+  - Implemented `recover_stock_module()` self-healing fallback triggered whenever the local backup file is absent.
+  - Dynamically resolves the exact parent kernel package owning the target module file on the running system using `dpkg -S "$target_orig"` (e.g. `linux-modules-extra-$(uname -r)` across generic, lowlatency, oem, hwe).
+  - Automatically fetches the official deb package via `apt-get download "$pkg"`, extracts only the pristine stock `.ko` file via `dpkg-deb -x`, and populates the backup cache before completing the restore.
+  - Secondary fallback: If APT/network is unavailable, compiles clean unpatched source directly via `prepare_source` + `build_module` (matching module compression `.ko`, `.zst`, `.xz`, `.gz`).
+  - Automatically adapts to any supported driver (`cp210x`, `ch341`, `ftdi_sio`, `pl2303`, `cdc_acm`).
+* **Consequences:** Eliminates single-point-of-failure on backup files. Restore operations always succeed even if user purged backups.
+
 ---
 
 ## 3. Known Gotchas & Constraints
