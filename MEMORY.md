@@ -225,6 +225,26 @@
   - Enhanced `_format_log_line()` in PyQt GUI to parse `m_step_ok` (`✓ [OK]`) and `m_step_err` (`✗ [ERR]`) with high-contrast formatting on pure white background.
 * **Consequences:** Operations fit within 5-6 clean single lines in the 520x520 console without scrolling. Users see immediate progress awareness and exact point of failure if an error occurs.
 
+### ADR-20: System Tray Companion with Quick Toggle and Hide-to-Tray Lifecycle
+* **Status:** Accepted (2026-11-06)
+* **Context:** Embedded developers switch frequently between debugging serial output (requires reset shield active) and flashing firmware (requires DTR/RTS assertions to trigger MCU bootloader). Leaving a 520x420 window constantly on screen occupies valuable desktop space across IDEs and terminals, while closing and reopening the app introduces workflow friction.
+* **Decision:**
+  - Integrated `QSystemTrayIcon` lifecycle into `UARTShieldApp`:
+    - Intercepted `closeEvent` (and `Escape` key): If system tray is available and not a forced exit, hides the window (`event.ignore()`, `self.hide()`) and displays a one-time balloon notification informing the user the app is minimized to tray.
+    - If tray is unavailable on the desktop environment (e.g. headless/minimal WM), falls back gracefully to standard window close (`event.accept()`).
+    - Added global shortcut `Ctrl+Q` and Tray Context Menu `Quit` to terminate the process cleanly via `_force_quit = True` and `QApplication.quit()`.
+  - Implemented dynamic 22x22 vector tray badge (`_make_tray_icon`):
+    - High-contrast rounded badge with center indicator dot visible on both dark (GNOME/Ubuntu default) and light OS top bars.
+    - Color-coded: Emerald (`#059669`) for `PATCH ACTIVE`, Amber (`#d97706`) for `PATCH INACTIVE`, Slate (`#64748b`) for `SYSTEM DEFAULT`, Light Slate (`#cbd5e1`) for `NO DEVICE`.
+  - Implemented Tray Context Menu:
+    - Header: Displays active device, port, and driver state (disabled informational row).
+    - Quick Toggle: Checkable `Block Reset Pins (Patch Active)` action that writes instantly to sysfs parameter (`/sys/module/<driver>/parameters/disable_dtr_rts`) without elevating unless needed, and emits desktop balloon toast when toggled while window is hidden.
+    - Open Control Panel: Restores, activates, and raises the main window.
+    - Quit: Clean process exit.
+  - Left-click or double-click on tray icon restores and brings window to focus.
+  - Real-time synchronization: `_update_tray()` is invoked on device refresh, selection change, toggle, and busy operating state.
+* **Consequences:** Enables zero-friction, instantaneous single-click toggle of MCU reset shield from top panel without window clutter, transforming the application into a persistent, unobtrusive status bar companion.
+
 ---
 
 ## 3. Known Gotchas & Constraints

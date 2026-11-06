@@ -15,14 +15,16 @@ import html
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
-    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QMenu
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QMenu,
+    QSystemTrayIcon
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
     QEasingCurve, pyqtProperty, QSize
 )
 from PyQt6.QtGui import (
-    QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut, QPainterPath
+    QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut,
+    QPainterPath, QIcon, QPixmap
 )
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -316,10 +318,15 @@ class UARTShieldApp(QWidget):
         self.active_task_label = ""
         self.spinner_idx = 0
         self.worker = None
+        self._force_quit = False
+        self._tray_notified = False
+        self._tray_last_state = ""
+        self.tray = None
 
         self._setup_window()
         self._build_ui()
         self._setup_shortcuts()
+        self._setup_tray()
 
         # Timers
         self.spinner_timer = QTimer(self)
@@ -480,6 +487,7 @@ class UARTShieldApp(QWidget):
         QShortcut(QKeySequence("Ctrl+R"), self, self.refresh_devices)
         QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.refresh_devices)
         QShortcut(QKeySequence("Ctrl+Shift+R"), self, lambda: self.patch_driver(force=True))
+        QShortcut(QKeySequence("Ctrl+Q"), self, self._quit_app)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.close)
 
     def _build_ui(self):
@@ -759,6 +767,8 @@ class UARTShieldApp(QWidget):
             self.lbl_footer.setText(task_name if task_name else "Ready • Space to toggle")
             self.lbl_footer.setStyleSheet("color: #94a3b8; font-size: 11px;")
 
+        self._update_tray()
+
     def _step_spinner(self):
         """
         @brief Cycle ASCII spinner frame in footer.
@@ -944,6 +954,8 @@ class UARTShieldApp(QWidget):
             else:
                 self.btn_patch.setEnabled(True)
 
+        self._update_tray()
+
     def _set_patch_btn_mode(self, is_secondary: bool):
         """
         @brief Toggle primary (blue) vs secondary (white) styling on Patch Driver button.
@@ -978,6 +990,8 @@ class UARTShieldApp(QWidget):
         self.btn_restore.setToolTip("Cannot restore: driver is already the original factory driver.")
         self.btn_restore.show()
 
+        self._update_tray()
+
     def _set_no_device_state(self):
         """
         @brief Update UI when no serial hardware is connected.
@@ -1002,6 +1016,8 @@ class UARTShieldApp(QWidget):
         self.btn_restore.setEnabled(False)
         self.btn_restore.setToolTip("")
         self.btn_restore.show()
+
+        self._update_tray()
 
     def _get_current_driver(self) -> str:
         idx = self.combo_ports.currentIndex()
@@ -1046,6 +1062,210 @@ class UARTShieldApp(QWidget):
         self.refresh_devices()
         if not success:
             self.log("[WARN] Operation cancelled or failed; switch reverted to match kernel state.")
+
+    # --------------------------------------------------------------------------
+    # System Tray & Background Companion
+    # --------------------------------------------------------------------------
+
+    def _make_tray_icon(self, state: str) -> QIcon:
+        """
+        @brief Render a high-contrast 22x22 vector tray icon matching current driver state.
+        @param state State string: 'active', 'inactive', 'default', or 'none'.
+        @return QIcon instance with rendered badge.
+        """
+        size = 22
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        if state == "active":
+            bg_color = QColor("#059669")    # Emerald 600
+            dot_color = QColor("#ffffff")   # Crisp white indicator
+            ring_color = QColor("#10b981")  # Emerald 500
+        elif state == "inactive":
+            bg_color = QColor("#d97706")    # Amber 600
+            dot_color = QColor("#ffffff")
+            ring_color = QColor("#f59e0b")  # Amber 500
+        elif state == "default":
+            bg_color = QColor("#64748b")    # Slate 500
+            dot_color = QColor("#cbd5e1")   # Slate 300
+            ring_color = QColor("#94a3b8")  # Slate 400
+        else:
+            bg_color = QColor("#cbd5e1")    # Slate 300
+            dot_color = QColor("#94a3b8")   # Slate 400
+            ring_color = QColor("#e2e8f0")
+
+        # Draw rounded badge base for high contrast across dark and light OS panels
+        painter.setPen(QPen(ring_color, 1.2))
+        painter.setBrush(QBrush(bg_color))
+        painter.drawRoundedRect(1, 1, size - 2, size - 2, 5.0, 5.0)
+
+        # Draw center indicator dot
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(dot_color))
+        radius = 3.5
+        center = size / 2.0
+        painter.drawEllipse(int(center - radius), int(center - radius), int(radius * 2), int(radius * 2))
+
+        painter.end()
+        return QIcon(pixmap)
+
+    def _setup_tray(self):
+        """
+        @brief Initialize system tray icon, context menu, and desktop integration.
+        """
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray = None
+            return
+
+        self.tray = QSystemTrayIcon(self)
+        self.tray.setIcon(self._make_tray_icon("none"))
+        self.tray.setToolTip("Kernel UART Patcher")
+
+        # Context Menu
+        self.tray_menu = QMenu()
+
+        # 1. Informational header (current device & mode)
+        self.tray_act_device = self.tray_menu.addAction("No device connected")
+        self.tray_act_device.setEnabled(False)
+
+        self.tray_menu.addSeparator()
+
+        # 2. Checkable quick toggle
+        self.tray_act_toggle = self.tray_menu.addAction("Block Reset Pins (Patch Active)")
+        self.tray_act_toggle.setCheckable(True)
+        self.tray_act_toggle.setEnabled(False)
+        self.tray_act_toggle.triggered.connect(self._on_tray_toggle)
+
+        self.tray_menu.addSeparator()
+
+        # 3. Restore main window
+        act_open = self.tray_menu.addAction("Open Control Panel")
+        act_open.triggered.connect(self._show_window)
+
+        # 4. Terminate app completely
+        act_quit = self.tray_menu.addAction("Quit")
+        act_quit.triggered.connect(self._quit_app)
+
+        self.tray.setContextMenu(self.tray_menu)
+        self.tray.activated.connect(self._on_tray_activated)
+        self.tray.show()
+
+    def _update_tray(self):
+        """
+        @brief Synchronize tray icon, tooltip, and quick-toggle action with current kernel state.
+        """
+        if not hasattr(self, "tray") or self.tray is None:
+            return
+
+        driver = self._get_current_driver()
+        port = self._get_current_port()
+
+        if not self.devices:
+            state = "none"
+            label = "No Device Connected"
+            tooltip = "Kernel UART Patcher — No device"
+            toggle_checked = False
+            toggle_enabled = False
+        elif not self.current_param_exists:
+            state = "default"
+            label = f"{driver} ({port}) • SYSTEM DEFAULT"
+            tooltip = f"Kernel UART Patcher\n{driver} ({port}) — SYSTEM DEFAULT (unpatched)"
+            toggle_checked = False
+            toggle_enabled = False
+        elif self.current_protected:
+            state = "active"
+            label = f"{driver} ({port}) • PATCH ACTIVE"
+            tooltip = f"Kernel UART Patcher\n{driver} ({port}) — PATCH ACTIVE ✓ (Resets blocked)"
+            toggle_checked = True
+            toggle_enabled = True
+        else:
+            state = "inactive"
+            label = f"{driver} ({port}) • PATCH INACTIVE"
+            tooltip = f"Kernel UART Patcher\n{driver} ({port}) — PATCH INACTIVE (DTR asserts on connect)"
+            toggle_checked = False
+            toggle_enabled = True
+
+        if state != self._tray_last_state:
+            self.tray.setIcon(self._make_tray_icon(state))
+            self._tray_last_state = state
+
+        self.tray.setToolTip(tooltip)
+        self.tray_act_device.setText(label)
+        self.tray_act_toggle.setChecked(toggle_checked)
+        self.tray_act_toggle.setEnabled(toggle_enabled and not self.is_operating)
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
+        """
+        @brief Handle user click on tray icon.
+        @param reason Click reason enum.
+        """
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
+            self._show_window()
+
+    def _on_tray_toggle(self, checked: bool):
+        """
+        @brief Handle quick-toggle action triggered from tray context menu.
+        @param checked True if requested PATCH ACTIVE, False for PATCH INACTIVE.
+        """
+        if not self.current_param_exists or self.is_operating:
+            self.tray_act_toggle.setChecked(self.current_protected)
+            return
+
+        self.switch.setChecked(checked, animated=False)
+        self._on_switch_toggled(checked)
+
+        if self.isHidden() and self.tray is not None:
+            driver = self._get_current_driver()
+            status_text = "PATCH ACTIVE" if checked else "PATCH INACTIVE"
+            self.tray.showMessage(
+                "Kernel UART Patcher",
+                f"{status_text} set for '{driver}'.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000
+            )
+
+    def _show_window(self):
+        """
+        @brief Restore, focus, and raise the main application window.
+        """
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+
+    def _quit_app(self):
+        """
+        @brief Terminate application process completely, bypassing hide-to-tray.
+        """
+        self._force_quit = True
+        QApplication.quit()
+
+    def closeEvent(self, event):
+        """
+        @brief Intercept window close to hide to tray if available; quit if forced.
+        @param event Close event to accept or ignore.
+        """
+        tray_available = hasattr(self, "tray") and self.tray is not None and self.tray.isVisible()
+        if self._force_quit or not tray_available:
+            event.accept()
+            return
+
+        event.ignore()
+        self.hide()
+
+        if not getattr(self, "_tray_notified", False):
+            self._tray_notified = True
+            self.tray.showMessage(
+                "Kernel UART Patcher",
+                "App minimized to system tray.\nClick icon to restore, right-click to quick toggle.",
+                QSystemTrayIcon.MessageIcon.Information,
+                3000
+            )
 
     # --------------------------------------------------------------------------
     # Action Handlers
