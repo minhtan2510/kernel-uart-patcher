@@ -170,6 +170,19 @@
      - Dynamically scrolls `QPlainTextEdit` to the maximum vertical scroll value upon each new line appended.
 * **Consequences:** Seamless aesthetic consistency across the light interface; instant visual comprehension of operation outcomes without visual jarring.
 
+### ADR-16: Prominent Status Badge Architecture with High-Contrast Theming
+* **Status:** Accepted (2026-11-06)
+* **Context:** The status badge in the hero card (`lbl_pill`) conveys critical hardware driver state (`PATCHED ACTIVATED`, `PATCHED INACTIVE`, `SYSTEM DEFAULT`). The previous `12px` font with subtle `1px` pastel border looked like a secondary tag rather than the primary visual focal point.
+* **Decision:**
+  - Increased typography size from `12px` to `14px` (`font-weight: bold; letter-spacing: 0.5px;`).
+  - Increased padding from `5px 14px` to `7px 18px` with rounded radius `9px` (height scaled from 27px to 36px).
+  - Doubled border thickness to `2px solid` with rich, high-contrast Tailwind palette:
+    - `PATCHED ACTIVATED`: Background `#dcfce7` (Emerald 100), Border `#10b981` (Emerald 500), Text `#047857` (Emerald 700).
+    - `PATCHED INACTIVE`: Background `#fef3c7` (Amber 100), Border `#f59e0b` (Amber 500), Text `#92400e` (Amber 800).
+    - `SYSTEM DEFAULT`: Background `#f1f5f9` (Slate 100), Border `#94a3b8` (Slate 400), Text `#1e293b` (Slate 800).
+  - Scaled animated toggle switch to `48x26` and centered both widgets vertically via `Qt.AlignmentFlag.AlignVCenter`.
+* **Consequences:** Immediately draws user attention to the current driver protection state while maintaining strict light-theme harmony.
+
 ---
 
 ## 3. Known Gotchas & Constraints
