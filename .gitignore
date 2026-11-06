@@ -20,6 +20,12 @@
 __pycache__/
 *.py[cod]
 
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+/Kernel UART Patcher
+
 # IDE configurations
 .vscode/
 .idea/

@@ -271,6 +271,20 @@
   - CPU utilization in background: **0.00%** (CPU time over 16s benchmark: 0.0100s).
   - Context switches reduced by **>90%**.
 
+### [2026-11-06] ADR-22: Standalone Single Executable Packaging with PyInstaller
+* **Context:** User requested packaging the entire project into a single standalone executable file (`Kernel UART Patcher`), matching the structure and distribution format of `Gremsy Firmware Debug Tools` (ELF 64-bit LSB stripped binary, ~60MB).
+* **Architecture & Implementation:**
+  - Integrated PyInstaller packaging with `--onefile --windowed`.
+  - Bundled core driver patcher scripts into the binary payload via `--add-data`:
+    - `src/core/uart_kernel_patch.sh -> core/`
+    - `src/core/patch_driver.py -> core/`
+  - Dynamic `sys._MEIPASS` runtime asset resolution:
+    - Updated `src/gui/gui.py` to detect `sys.frozen` and resolve `CORE_SCRIPT = os.path.join(sys._MEIPASS, "core", "uart_kernel_patch.sh")`.
+    - Automatically enforces `0o755` executable permissions on `sys._MEIPASS`, `core/`, `uart_kernel_patch.sh`, and `patch_driver.py` at startup, ensuring seamless `pkexec` root execution without permission faults.
+  - Implemented automated one-click build script [`build.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/build.sh):
+    - Automatically installs PyInstaller if missing, compiles with `--clean --noconfirm`, and copies the final binary directly to the project root: `Kernel UART Patcher` (55MB ELF executable).
+* **Consequences:** The application is now fully portable. Users can copy the single `Kernel UART Patcher` binary to any Linux machine and run it directly without installing Python, PyQt6, or dependencies.
+
 ---
 
 ## 3. Known Gotchas & Constraints
