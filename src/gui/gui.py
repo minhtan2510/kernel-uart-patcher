@@ -297,8 +297,8 @@ class UARTShieldApp(QWidget):
     """
     @brief Ultra-compact modern minimalist control widget for serial DTR/RTS reset shield.
     """
-    WINDOW_WIDTH = 420
-    WINDOW_HEIGHT = 500
+    WINDOW_WIDTH = 520
+    WINDOW_HEIGHT = 520
 
     SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
