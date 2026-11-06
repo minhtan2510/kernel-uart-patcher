@@ -197,6 +197,14 @@
     - In CLI: Prompts interactive confirmation `read -rp` unless `-y` is supplied.
 * **Consequences:** Eliminates single-point-of-failure on backup files. Restore operations always succeed even if user purged backups.
 
+### ADR-18: Fixed Window Dimension Expansion (520x520) for Single-Line Status Logs
+* **Status:** Accepted (2026-11-06)
+* **Context:** The original window size was `420x500`. At 420px width, standard status lines (e.g., `[SUCCESS] PATCH ACTIVE set via sysfs (instant).`, `[DONE] Driver 'cp210x' patched and reloaded successfully!`) were truncated into multiple wrapped lines, making the console feel cramped and segmented.
+* **Decision:**
+  - Expanded `WINDOW_WIDTH` from `420` to `520px` and `WINDOW_HEIGHT` from `500` to `520px`.
+  - Retained rigid fixed-size enforcement (`setFixedSize(520, 520)`) per user requirement to preserve widget layout stability and compact floating tool ergonomics.
+* **Consequences:** All primary status, milestone, and outcome log lines render completely on a single unbroken line while preserving the compact, distraction-free control panel footprint.
+
 ---
 
 ## 3. Known Gotchas & Constraints
