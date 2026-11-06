@@ -243,7 +243,8 @@
       - `NO DEVICE`: Dotted outline adapter body (`#94a3b8`, `Qt.PenStyle.DashLine`) with translucent fill for standby/disconnected state.
   - Implemented Tray Context Menu:
     - Header: Displays active device, port, and driver state (disabled informational row).
-    - Quick Toggle: Checkable `Block Reset Pins (Patch Active)` action that writes instantly to sysfs parameter (`/sys/module/<driver>/parameters/disable_dtr_rts`) without elevating unless needed, and emits desktop balloon toast when toggled while window is hidden.
+    - Quick Toggle: Checkable `Block Reset Pins (Patch Active)` action that writes instantly to sysfs parameter (`/sys/module/<driver>/parameters/disable_dtr_rts`) without elevating unless needed, reflecting state directly via instant icon color switch (<2ms).
+    - Avoid `QSystemTrayIcon.showMessage()` which triggers the FreeDesktop SNI `NeedsAttention` status, causing GNOME Shell AppIndicator to temporarily overwrite the tray icon with the fallback exclamation/warning icon (`dialog-warning-symbolic`) for the duration of the notification. Native desktop notifications use independent `notify-send` via `org.freedesktop.Notifications`.
     - Open Control Panel: Restores, activates, and raises the main window.
     - Quit: Clean process exit.
   - Left-click or double-click on tray icon restores and brings window to focus.

@@ -1293,15 +1293,21 @@ class UARTShieldApp(QWidget):
         self.switch.setChecked(checked, animated=False)
         self._on_switch_toggled(checked)
 
-        if self.isHidden() and self.tray is not None:
-            driver = self._get_current_driver()
-            status_text = "PATCH ACTIVE" if checked else "PATCH INACTIVE"
-            self.tray.showMessage(
-                "Kernel UART Patcher",
-                f"{status_text} set for '{driver}'.",
-                QSystemTrayIcon.MessageIcon.Information,
-                2000
+    def _send_desktop_notification(self, title: str, message: str):
+        """
+        @brief Send native desktop notification via DBus notify-send without triggering
+               the StatusNotifierItem NeedsAttention fallback exclamation icon.
+        @param title Notification title string.
+        @param message Notification body text.
+        """
+        try:
+            subprocess.Popen(
+                ["notify-send", "-a", "Kernel UART Patcher", "-u", "low", title, message],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
             )
+        except Exception:
+            pass
 
     def _show_window(self):
         """
@@ -1333,11 +1339,9 @@ class UARTShieldApp(QWidget):
 
         if not getattr(self, "_tray_notified", False):
             self._tray_notified = True
-            self.tray.showMessage(
+            self._send_desktop_notification(
                 "Kernel UART Patcher",
-                "App minimized to system tray.\nClick icon to restore, right-click to quick toggle.",
-                QSystemTrayIcon.MessageIcon.Information,
-                3000
+                "App minimized to system tray.\nClick icon to restore, right-click to quick toggle."
             )
 
     # --------------------------------------------------------------------------
