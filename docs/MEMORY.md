@@ -295,6 +295,24 @@
   - Cleaned and auto-purged all transient build artifacts (`build/`, `dist/`, `*.spec`).
 * **Consequences:** Pristine workspace layout matching commercial tools like Gremsy Firmware Debug Tools while keeping source code, build scripts, and documentation strictly modularized.
 
+### [2026-11-06] ADR-24: "Start Minimized on Boot" Autostart Integration via XDG Desktop Entry
+* **Context:** User requested seamless autostart on system boot so serial DTR/RTS reset protection is active from the moment the user logs in, without requiring manual app launch.
+* **Architecture & Implementation:**
+  - Added CLI flag support: `--minimized` (or `-m`) in `src/gui/gui.py` `main()`.
+  - When `--minimized` is passed and system tray is available:
+    - Bypasses `window.show()`.
+    - Automatically initializes tray icon, sets refresh timer to 5000ms background interval, and trims memory via `_trim_memory()`.
+    - Window remains completely hidden until user explicitly clicks the tray icon or selects "Open Control Panel".
+  - Two-Way Synchronized UI Control:
+    - Added checkable action in System Tray context menu: `Start Minimized on Boot`.
+    - Added checkable checkbox in main window footer: `Start on boot`.
+    - Both controls are bidirectionally synchronized without signal recursion.
+  - XDG Autostart Specification Compliance:
+    - Manages `~/.config/autostart/kernel-uart-patcher.desktop`.
+    - Resolves executable dynamically (`sys.executable` if frozen, or root `Kernel UART Patcher` binary, or `scripts/run.sh`).
+    - Automatically renders and exports the vector USB plug icon to `~/.local/share/icons/kernel-uart-patcher.png` (64x64) for desktop environment icon integration.
+* **Consequences:** End-users can enable/disable system startup with a single click from either the tray or the main window, converting the tool into a persistent background hardware protection daemon.
+
 ---
 
 ## 3. Known Gotchas & Constraints

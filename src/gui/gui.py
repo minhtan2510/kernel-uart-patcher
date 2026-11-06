@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
     QStyledItemDelegate, QStyleOptionViewItem, QStyle, QMenu,
-    QSystemTrayIcon
+    QSystemTrayIcon, QCheckBox
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
@@ -43,6 +43,11 @@ def _trim_memory():
         libc.malloc_trim(0)
     except Exception:
         pass
+
+AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
+AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, "kernel-uart-patcher.desktop")
+APP_ICON_DIR = os.path.expanduser("~/.local/share/icons")
+APP_ICON_FILE = os.path.join(APP_ICON_DIR, "kernel-uart-patcher.png")
 
 # ------------------------------------------------------------------------------
 # Modern Minimalist Light Palette (Tailwind Slate / Zinc inspired)
@@ -322,8 +327,9 @@ class UARTShieldApp(QWidget):
 
     SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-    def __init__(self):
+    def __init__(self, start_minimized: bool = False):
         super().__init__()
+        self.start_minimized = start_minimized
         self.devices = []
         self._last_raw_ports = None
         self.is_operating = False
@@ -353,6 +359,11 @@ class UARTShieldApp(QWidget):
         # Initial device scan first, then initialize tray with accurate state
         self.refresh_devices()
         self._setup_tray()
+
+        if self.start_minimized:
+            self.hide()
+            self.refresh_timer.setInterval(5000)
+            _trim_memory()
 
     def _setup_window(self):
         """
@@ -597,12 +608,21 @@ class UARTShieldApp(QWidget):
         self.txt_log.setMaximumBlockCount(1000)
         root_layout.addWidget(self.txt_log)
 
-        # 6. Footer Row (Status / Spinner + Clear Button)
+        # 6. Footer Row (Status / Spinner + Autostart + Clear Button)
         ftr = QHBoxLayout()
         self.lbl_footer = QLabel("Ready • Space to toggle")
         self.lbl_footer.setStyleSheet("color: #94a3b8; font-size: 11px;")
         ftr.addWidget(self.lbl_footer)
         ftr.addStretch()
+
+        self.chk_autostart = QCheckBox("Start on boot")
+        self.chk_autostart.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_autostart.setStyleSheet("QCheckBox { color: #64748b; font-size: 11px; } QCheckBox:hover { color: #0f172a; }")
+        self.chk_autostart.setChecked(self._is_autostart_enabled())
+        self.chk_autostart.toggled.connect(self._on_autostart_toggled)
+        ftr.addWidget(self.chk_autostart)
+
+        ftr.addSpacing(10)
 
         self.btn_clear = QPushButton("Clear")
         self.btn_clear.setStyleSheet("background: transparent; color: #64748b; font-size: 11px; border: none; padding: 2px 4px;")
@@ -1281,11 +1301,19 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 3. Restore main window
+        # 3. Checkable Start on Boot
+        self.tray_act_autostart = self.tray_menu.addAction("Start Minimized on Boot")
+        self.tray_act_autostart.setCheckable(True)
+        self.tray_act_autostart.setChecked(self._is_autostart_enabled())
+        self.tray_act_autostart.toggled.connect(self._on_autostart_toggled)
+
+        self.tray_menu.addSeparator()
+
+        # 4. Restore main window
         act_open = self.tray_menu.addAction("Open Control Panel")
         act_open.triggered.connect(self._show_window)
 
-        # 4. Terminate app completely
+        # 5. Terminate app completely
         act_quit = self.tray_menu.addAction("Quit")
         act_quit.triggered.connect(self._quit_app)
 
@@ -1367,6 +1395,104 @@ class UARTShieldApp(QWidget):
 
         self.switch.setChecked(checked, animated=False)
         self._on_switch_toggled(checked)
+
+    def _is_autostart_enabled(self) -> bool:
+        """
+        @brief Check if autostart desktop entry currently exists.
+        @return True if enabled, False otherwise.
+        """
+        return os.path.isfile(AUTOSTART_FILE)
+
+    def _get_autostart_exec_command(self) -> str:
+        """
+        @brief Resolve the absolute command path to launch this tool minimized.
+        @return Command string suitable for desktop entry Exec field.
+        """
+        if getattr(sys, "frozen", False):
+            return f'"{sys.executable}" --minimized'
+
+        # When running from source, prefer root binary if available, else scripts/run.sh
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+        binary_path = os.path.join(root_dir, "Kernel UART Patcher")
+        if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
+            return f'"{binary_path}" --minimized'
+
+        run_sh = os.path.join(root_dir, "scripts", "run.sh")
+        if os.path.isfile(run_sh) and os.access(run_sh, os.X_OK):
+            return f'"{run_sh}" --minimized'
+
+        return f'"{sys.executable}" "{os.path.abspath(__file__)}" --minimized'
+
+    def _ensure_app_icon_saved(self):
+        """
+        @brief Persist vector tray icon as PNG for desktop environment integration.
+        """
+        try:
+            os.makedirs(APP_ICON_DIR, exist_ok=True)
+            if not os.path.isfile(APP_ICON_FILE):
+                icon = self._make_tray_icon("active")
+                pixmap = icon.pixmap(QSize(64, 64))
+                pixmap.save(APP_ICON_FILE, "PNG")
+        except Exception:
+            pass
+
+    def _on_autostart_toggled(self, enabled: bool):
+        """
+        @brief Handle toggle event for autostart on system boot.
+        @param enabled True to enable autostart, False to disable.
+        """
+        # Synchronize UI controls without recursion
+        if hasattr(self, "chk_autostart") and self.chk_autostart.isChecked() != enabled:
+            self.chk_autostart.blockSignals(True)
+            self.chk_autostart.setChecked(enabled)
+            self.chk_autostart.blockSignals(False)
+
+        if hasattr(self, "tray_act_autostart") and self.tray_act_autostart.isChecked() != enabled:
+            self.tray_act_autostart.blockSignals(True)
+            self.tray_act_autostart.setChecked(enabled)
+            self.tray_act_autostart.blockSignals(False)
+
+        try:
+            if enabled:
+                os.makedirs(AUTOSTART_DIR, exist_ok=True)
+                self._ensure_app_icon_saved()
+                exec_cmd = self._get_autostart_exec_command()
+
+                icon_val = APP_ICON_FILE if os.path.isfile(APP_ICON_FILE) else "utilities-terminal"
+                content = (
+                    "[Desktop Entry]\n"
+                    "Type=Application\n"
+                    "Version=1.0\n"
+                    "Name=Kernel UART Patcher\n"
+                    "GenericName=Serial DTR/RTS Reset Shield\n"
+                    "Comment=Prevent unwanted serial DTR/RTS resets on USB-UART adapters\n"
+                    f"Exec={exec_cmd}\n"
+                    f"Icon={icon_val}\n"
+                    "Terminal=false\n"
+                    "Categories=Utility;Development;\n"
+                    "StartupNotify=false\n"
+                    "X-GNOME-Autostart-enabled=true\n"
+                )
+                with open(AUTOSTART_FILE, "w") as f:
+                    f.write(content)
+                os.chmod(AUTOSTART_FILE, 0o755)
+                self.log("[SUCCESS] Autostart on boot enabled.")
+                self._flash_footer("✓ Autostart on boot enabled")
+            else:
+                if os.path.isfile(AUTOSTART_FILE):
+                    os.remove(AUTOSTART_FILE)
+                self.log("[INFO] Autostart on boot disabled.")
+                self._flash_footer("Autostart disabled")
+        except Exception as e:
+            self.log(f"[ERROR] Failed to update autostart setting: {e}")
+            if hasattr(self, "chk_autostart"):
+                self.chk_autostart.blockSignals(True)
+                self.chk_autostart.setChecked(self._is_autostart_enabled())
+                self.chk_autostart.blockSignals(False)
+            if hasattr(self, "tray_act_autostart"):
+                self.tray_act_autostart.blockSignals(True)
+                self.tray_act_autostart.setChecked(self._is_autostart_enabled())
+                self.tray_act_autostart.blockSignals(False)
 
     def _show_window(self):
         """
@@ -1541,8 +1667,12 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    window = UARTShieldApp()
-    window.show()
+    start_minimized = ("--minimized" in sys.argv or "-m" in sys.argv)
+    tray_available = QSystemTrayIcon.isSystemTrayAvailable()
+
+    window = UARTShieldApp(start_minimized=start_minimized and tray_available)
+    if not (start_minimized and tray_available):
+        window.show()
 
     sys.exit(app.exec())
 
