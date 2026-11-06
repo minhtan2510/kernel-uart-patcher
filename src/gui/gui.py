@@ -319,7 +319,6 @@ class UARTShieldApp(QWidget):
         self.spinner_idx = 0
         self.worker = None
         self._force_quit = False
-        self._tray_notified = False
         self._tray_last_state = ""
         self.tray = None
         self._tray_icons = {}
@@ -1293,22 +1292,6 @@ class UARTShieldApp(QWidget):
         self.switch.setChecked(checked, animated=False)
         self._on_switch_toggled(checked)
 
-    def _send_desktop_notification(self, title: str, message: str):
-        """
-        @brief Send native desktop notification via DBus notify-send without triggering
-               the StatusNotifierItem NeedsAttention fallback exclamation icon.
-        @param title Notification title string.
-        @param message Notification body text.
-        """
-        try:
-            subprocess.Popen(
-                ["notify-send", "-a", "Kernel UART Patcher", "-u", "low", title, message],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        except Exception:
-            pass
-
     def _show_window(self):
         """
         @brief Restore, focus, and raise the main application window.
@@ -1336,13 +1319,6 @@ class UARTShieldApp(QWidget):
 
         event.ignore()
         self.hide()
-
-        if not getattr(self, "_tray_notified", False):
-            self._tray_notified = True
-            self._send_desktop_notification(
-                "Kernel UART Patcher",
-                "App minimized to system tray.\nClick icon to restore, right-click to quick toggle."
-            )
 
     # --------------------------------------------------------------------------
     # Action Handlers

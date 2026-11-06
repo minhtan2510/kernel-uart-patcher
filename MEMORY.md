@@ -230,7 +230,7 @@
 * **Context:** Embedded developers switch frequently between debugging serial output (requires reset shield active) and flashing firmware (requires DTR/RTS assertions to trigger MCU bootloader). Leaving a 520x420 window constantly on screen occupies valuable desktop space across IDEs and terminals, while closing and reopening the app introduces workflow friction.
 * **Decision:**
   - Integrated `QSystemTrayIcon` lifecycle into `UARTShieldApp`:
-    - Intercepted `closeEvent` (and `Escape` key): If system tray is available and not a forced exit, hides the window (`event.ignore()`, `self.hide()`) and displays a one-time balloon notification informing the user the app is minimized to tray.
+    - Intercepted `closeEvent` (and `Escape` key): If system tray is available and not a forced exit, silently hides the window to tray (`event.ignore()`, `self.hide()`) without disturbing popup notifications.
     - If tray is unavailable on the desktop environment (e.g. headless/minimal WM), falls back gracefully to standard window close (`event.accept()`).
     - Added global shortcut `Ctrl+Q` and Tray Context Menu `Quit` to terminate the process cleanly via `_force_quit = True` and `QApplication.quit()`.
   - Implemented dynamic 22x22 HiDPI USB-UART adapter icon with real-time status pip (`_make_tray_icon`):
@@ -244,7 +244,7 @@
   - Implemented Tray Context Menu:
     - Header: Displays active device, port, and driver state (disabled informational row).
     - Quick Toggle: Checkable `Block Reset Pins (Patch Active)` action that writes instantly to sysfs parameter (`/sys/module/<driver>/parameters/disable_dtr_rts`) without elevating unless needed, reflecting state directly via instant icon color switch (<2ms).
-    - Avoid `QSystemTrayIcon.showMessage()` which triggers the FreeDesktop SNI `NeedsAttention` status, causing GNOME Shell AppIndicator to temporarily overwrite the tray icon with the fallback exclamation/warning icon (`dialog-warning-symbolic`) for the duration of the notification. Native desktop notifications use independent `notify-send` via `org.freedesktop.Notifications`.
+    - Completely avoids `QSystemTrayIcon.showMessage()` or popup toasts, ensuring zero desktop distractions and zero FreeDesktop SNI status glitches.
     - Open Control Panel: Restores, activates, and raises the main window.
     - Quit: Clean process exit.
   - Left-click or double-click on tray icon restores and brings window to focus.
