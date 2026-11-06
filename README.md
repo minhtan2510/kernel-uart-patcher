@@ -65,10 +65,9 @@ sudo ./src/core/uart_kernel_patch.sh restore cp210x
 LinuxUART/
 ├── Kernel UART Patcher       # Standalone executable binary (zero dependencies)
 ├── README.md                 # Project documentation
+├── MEMORY.md                 # Architecture Decision Records & persistent memory
+├── AGENT.md                  # AI pair-programming context & hardware rules
 ├── .gitignore                # Git ignore rules
-├── docs/                     # Technical architecture & ADR history
-│   ├── MEMORY.md             # Complete Architecture Decision Records (ADR-01 to ADR-23)
-│   └── AGENT.md              # AI pair-programming context & hardware rules
 ├── scripts/                  # Development & build automation
 │   ├── run.sh                # Launch GUI from Python source
 │   └── build.sh              # Package into standalone ELF binary via PyInstaller
