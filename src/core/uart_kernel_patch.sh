@@ -589,6 +589,95 @@ cmd_patch()
     echo ""
 }
 
+# ==============================================================================
+# Recover Stock Module (Self-Healing Fallback when backup file is missing)
+# ==============================================================================
+
+recover_stock_module()
+{
+    local target_backup="$1"
+    local target_orig="$2"
+
+    warn "Backup file not found at: $target_backup"
+    info "Attempting self-healing recovery: fetching official stock driver from package repository..."
+
+    # Method 1: Query dpkg for the package owning the driver
+    local pkg=""
+    if command -v dpkg >/dev/null 2>&1; then
+        pkg=$(dpkg -S "$target_orig" 2>/dev/null | cut -d: -f1 | head -n 1 || true)
+        if [ -z "$pkg" ]; then
+            local mod_base
+            mod_base=$(basename "$target_orig")
+            pkg=$(dpkg -S "*/${mod_base}" 2>/dev/null | grep "$KVER" | cut -d: -f1 | head -n 1 || true)
+        fi
+    fi
+
+    if [ -n "$pkg" ]; then
+        info "Identified parent kernel package: $pkg"
+        local recover_dir
+        recover_dir=$(mktemp -d /tmp/uart_stock_recover.XXXXXX)
+
+        info "Downloading official deb package via apt-get ..."
+        if (cd "$recover_dir" && apt-get download "$pkg" >/dev/null 2>&1); then
+            local deb_file
+            deb_file=$(find "$recover_dir" -name "*.deb" | head -n 1)
+            if [ -n "$deb_file" ] && [ -f "$deb_file" ]; then
+                info "Extracting official stock driver from $(basename "$deb_file") ..."
+                mkdir -p "$recover_dir/extracted"
+                dpkg-deb -x "$deb_file" "$recover_dir/extracted"
+
+                local extracted_ko
+                extracted_ko=$(find "$recover_dir/extracted" -name "$(basename "$target_orig")" | head -n 1)
+                if [ -n "$extracted_ko" ] && [ -f "$extracted_ko" ]; then
+                    mkdir -p "$BACKUP_DIR"
+                    cp "$extracted_ko" "$target_backup"
+                    echo "$KVER" > "$BACKUP_DIR/${MODULE}.kver"
+                    echo "$target_orig" > "$BACKUP_DIR/${MODULE}.path"
+                    info "Successfully recovered official stock driver into backup cache!"
+                fi
+            fi
+        fi
+        rm -rf "$recover_dir"
+    fi
+
+    # Method 2: Fallback to compiling clean unpatched source (if offline or apt failed)
+    if [ ! -f "$target_backup" ]; then
+        info "APT download unavailable. Attempting to build clean unpatched module from source..."
+        prepare_source
+        if build_module; then
+            local clean_ko="$WORK_DIR/build/${MOD_FILESTEM}.ko"
+            if [ -f "$clean_ko" ]; then
+                mkdir -p "$BACKUP_DIR"
+                if [[ "$target_orig" == *.zst ]]; then
+                    zstd -f -q "$clean_ko" -o "${clean_ko}.zst"
+                    cp "${clean_ko}.zst" "$target_backup"
+                elif [[ "$target_orig" == *.xz ]]; then
+                    xz -f -k -q "$clean_ko"
+                    cp "${clean_ko}.xz" "$target_backup"
+                elif [[ "$target_orig" == *.gz ]]; then
+                    gzip -f -k -q "$clean_ko"
+                    cp "${clean_ko}.gz" "$target_backup"
+                else
+                    cp "$clean_ko" "$target_backup"
+                fi
+                echo "$KVER" > "$BACKUP_DIR/${MODULE}.kver"
+                echo "$target_orig" > "$BACKUP_DIR/${MODULE}.path"
+                info "Successfully built clean unpatched driver!"
+            fi
+        fi
+    fi
+
+    if [ ! -f "$target_backup" ]; then
+        die "No backup found at: $target_backup" \
+            "\n         Automatic recovery of stock driver failed." \
+            "\n         To manually restore stock driver, run: sudo apt install --reinstall linux-modules-extra-$(uname -r)"
+    fi
+}
+
+# ==============================================================================
+# Restore original module
+# ==============================================================================
+
 cmd_restore()
 {
     echo -e "\n${BOLD}=== Restoring original module: ${MODULE} ===${NC}\n"
@@ -598,6 +687,9 @@ cmd_restore()
         orig_path=$(cat "$BACKUP_DIR/${MODULE}.path")
     else
         orig_path=$(modinfo -F filename "$MODULE" 2>/dev/null || echo "")
+        if [ -z "$orig_path" ]; then
+            orig_path=$(find "/lib/modules/${KVER}" \( -name "${MODULE}.ko*" -o -name "${MOD_FILESTEM}.ko*" \) 2>/dev/null | head -n 1 || echo "")
+        fi
     fi
 
     if [ -z "$orig_path" ]; then
@@ -607,8 +699,7 @@ cmd_restore()
     local backup_file="$BACKUP_DIR/$(basename "$orig_path").orig"
 
     if [ ! -f "$backup_file" ]; then
-        die "No backup found at: $backup_file" \
-            "\n         Original module was never backed up."
+        recover_stock_module "$backup_file" "$orig_path"
     fi
 
     if [ -f "$BACKUP_DIR/${MODULE}.kver" ]; then
