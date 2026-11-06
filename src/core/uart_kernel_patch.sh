@@ -599,6 +599,19 @@ recover_stock_module()
     local target_orig="$2"
 
     warn "Backup file not found at: $target_backup"
+
+    if ! $AUTO_CONFIRM; then
+        echo ""
+        warn "Local backup file does not exist in $BACKUP_DIR."
+        read -rp "  Do you want to download and restore official stock driver from Ubuntu APT? [y/N] " reply
+        if [[ ! "${reply:-}" =~ ^[Yy]$ ]]; then
+            echo ""
+            info "Restore operation cancelled."
+            exit 0
+        fi
+        echo ""
+    fi
+
     info "Attempting self-healing recovery: fetching official stock driver from package repository..."
 
     # Method 1: Query dpkg for the package owning the driver

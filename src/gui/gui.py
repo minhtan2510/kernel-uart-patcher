@@ -1111,20 +1111,53 @@ class UARTShieldApp(QWidget):
         if chosen == action_rebuild:
             self.patch_driver(force=True)
 
+    def _has_driver_backup(self, driver: str) -> bool:
+        """
+        @brief Check if a local backup file exists for the given driver.
+        @param driver Driver module name (e.g. cp210x, cdc_acm).
+        @return True if local backup file exists, False otherwise.
+        """
+        backup_dir = "/var/backups/uart_dtr_patch"
+        if not os.path.isdir(backup_dir):
+            return False
+        if os.path.isfile(os.path.join(backup_dir, f"{driver}.path")):
+            return True
+        norm_driver = driver.replace("-", "_")
+        try:
+            for fname in os.listdir(backup_dir):
+                if fname.replace("-", "_").startswith(norm_driver) and fname.endswith(".orig"):
+                    return True
+        except (PermissionError, FileNotFoundError):
+            return False
+        return False
+
     def restore_driver(self):
         """
         @brief Trigger driver restore to stock Ubuntu version.
         """
         driver = self._get_current_driver()
         port = self._get_current_port()
-        confirm = QMessageBox.question(
-            self,
-            "Restore Original Driver",
-            f"Restore original system default driver for '{driver}' ({port})?\n\n"
-            "Warning: This will remove reset protection and restore standard Ubuntu DTR/RTS behavior.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
+
+        if not self._has_driver_backup(driver):
+            confirm = QMessageBox.question(
+                self,
+                "Backup Not Found - Recover from APT?",
+                f"Backup file not found for driver '{driver}' ({port}).\n\n"
+                "The local backup directory (/var/backups/uart_dtr_patch) does not exist or has been removed.\n\n"
+                "Would you like to download and restore the official stock driver from Ubuntu APT repositories?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+        else:
+            confirm = QMessageBox.question(
+                self,
+                "Restore Original Driver",
+                f"Restore original system default driver for '{driver}' ({port})?\n\n"
+                "Warning: This will remove reset protection and restore standard Ubuntu DTR/RTS behavior.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+
         if confirm != QMessageBox.StandardButton.Yes:
             return
 
