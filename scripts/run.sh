@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-cd "$SCRIPT_DIR"
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$ROOT_DIR"
 
 # Verify python3 is installed
 if ! command -v python3 &>/dev/null; then
@@ -15,4 +15,4 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 # Launch GUI from src/gui
-exec python3 "$SCRIPT_DIR/src/gui/gui.py" "$@"
+exec python3 "$ROOT_DIR/src/gui/gui.py" "$@"

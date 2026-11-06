@@ -8,8 +8,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-cd "$SCRIPT_DIR"
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$ROOT_DIR"
 
 OUTPUT_NAME="Kernel UART Patcher"
 
@@ -39,7 +39,7 @@ echo "[+] Using PyInstaller: $($PYINSTALLER_BIN --version)"
 
 # 3. Clean previous build artifacts
 echo "[*] Cleaning old build artifacts..."
-rm -rf build dist "$OUTPUT_NAME.spec"
+rm -rf "$ROOT_DIR/build" "$ROOT_DIR/dist" "$ROOT_DIR/$OUTPUT_NAME.spec"
 
 # 4. Build single-file executable
 echo "[*] Compiling and packaging single-file executable binary..."
@@ -53,19 +53,22 @@ echo "[*] Compiling and packaging single-file executable binary..."
     --noconfirm \
     src/gui/gui.py
 
-# 5. Verify output
-TARGET_BINARY="$SCRIPT_DIR/dist/$OUTPUT_NAME"
+# 5. Verify output and clean temporary build artifacts
+TARGET_BINARY="$ROOT_DIR/dist/$OUTPUT_NAME"
 if [ -f "$TARGET_BINARY" ]; then
     chmod +x "$TARGET_BINARY"
     # Copy to root directory for convenient single-click execution
-    cp -f "$TARGET_BINARY" "$SCRIPT_DIR/$OUTPUT_NAME"
-    chmod +x "$SCRIPT_DIR/$OUTPUT_NAME"
+    cp -f "$TARGET_BINARY" "$ROOT_DIR/$OUTPUT_NAME"
+    chmod +x "$ROOT_DIR/$OUTPUT_NAME"
 
-    FILE_SIZE=$(du -h "$SCRIPT_DIR/$OUTPUT_NAME" | cut -f1)
+    # Clean intermediate build directories to keep workspace pristine
+    rm -rf "$ROOT_DIR/build" "$ROOT_DIR/dist" "$ROOT_DIR/$OUTPUT_NAME.spec"
+
+    FILE_SIZE=$(du -h "$ROOT_DIR/$OUTPUT_NAME" | cut -f1)
     echo "======================================================================"
     echo "[✓] SUCCESS: Single-file binary created successfully!"
-    echo "    - Output: $SCRIPT_DIR/$OUTPUT_NAME"
-    echo "    - Format: $(file -b "$SCRIPT_DIR/$OUTPUT_NAME" | cut -d, -f1)"
+    echo "    - Output: $ROOT_DIR/$OUTPUT_NAME"
+    echo "    - Format: $(file -b "$ROOT_DIR/$OUTPUT_NAME" | cut -d, -f1)"
     echo "    - Size:   $FILE_SIZE"
     echo "======================================================================"
     echo "You can now run it directly by double-clicking or executing:"

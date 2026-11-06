@@ -4,7 +4,7 @@
 * **Repository:** `LinuxUART` — **Kernel UART Patcher** (Linux USB-UART DTR/RTS Reset Shield).
 * **Core Problem:** Linux kernel and userspace serial libraries (PySerial, QtSerialPort, Gimbal GUIs) automatically assert `DTR`/`RTS` (driving them LOW / 0V) on connect. On gimbals (Gremsy) and microcontrollers (STM32, ESP32, Arduino), `DTR` is hardwired to the MCU hardware `NRST`/`RESET` line, causing continuous resets upon connection.
 * **Architecture:**
-  - **Single Entry Point:** [`run.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/run.sh) in root directory.
+  - **Entry Points:** Standalone executable [`Kernel UART Patcher`](file:///home/minhtan/Desktop/Script/LinuxUART/Kernel%20UART%20Patcher) in root for end-users, or developer launcher [`scripts/run.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/scripts/run.sh).
   - **Core Layer ([`src/core/`](file:///home/minhtan/Desktop/Script/LinuxUART/src/core)):** Out-of-tree kernel driver deep-patching engine ([`patch_driver.py`](file:///home/minhtan/Desktop/Script/LinuxUART/src/core/patch_driver.py), [`uart_kernel_patch.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/src/core/uart_kernel_patch.sh)).
   - **GUI Layer ([`src/gui/`](file:///home/minhtan/Desktop/Script/LinuxUART/src/gui)):** Python 3 Tkinter/ttk ultra-compact modern minimalist control widget ([`gui.py`](file:///home/minhtan/Desktop/Script/LinuxUART/src/gui/gui.py)).
 
@@ -284,6 +284,16 @@
   - Implemented automated one-click build script [`build.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/build.sh):
     - Automatically installs PyInstaller if missing, compiles with `--clean --noconfirm`, and copies the final binary directly to the project root: `Kernel UART Patcher` (55MB ELF executable).
 * **Consequences:** The application is now fully portable. Users can copy the single `Kernel UART Patcher` binary to any Linux machine and run it directly without installing Python, PyQt6, or dependencies.
+
+### [2026-11-06] ADR-23: Folder Restructuring for Developer Hygiene & Single-Click Release
+* **Context:** The repository root previously held mixed artifacts: standalone executable, build scripts, development launchers, and technical docs, alongside temporary PyInstaller build directories (`build/`, `dist/`, `*.spec`).
+* **Decision:**
+  - Root: Retains only `Kernel UART Patcher` (55MB standalone binary for instant single-click execution) and `README.md`.
+  - `docs/`: Technical context and architecture records (`MEMORY.md`, `AGENT.md`).
+  - `scripts/`: Development and packaging automation (`run.sh` for source execution, `build.sh` for binary recompilation).
+  - `src/`: Clean modular source code (`src/core/`, `src/gui/`).
+  - Cleaned and auto-purged all transient build artifacts (`build/`, `dist/`, `*.spec`).
+* **Consequences:** Pristine workspace layout matching commercial tools like Gremsy Firmware Debug Tools while keeping source code, build scripts, and documentation strictly modularized.
 
 ---
 

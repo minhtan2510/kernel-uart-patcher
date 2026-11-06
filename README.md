@@ -6,30 +6,47 @@ Bộ công cụ giải quyết triệt để vấn đề Ubuntu Kernel và Ứng
 
 ## 1. Cấu Trúc Thư Mục (Project Structure)
 
-Project được cấu trúc tinh gọn với **1 file chạy duy nhất ở thư mục gốc**:
+Project được cấu trúc chuẩn hóa, chuyên nghiệp và gọn gàng:
 
 ```text
 LinuxUART/
-├── run.sh                       # File chạy duy nhất ở thư mục gốc (Khởi động GUI)
-├── README.md                    # Tài liệu hướng dẫn
+├── Kernel UART Patcher          # File chạy nhị phân độc lập duy nhất (Click chạy ngay)
+├── README.md                    # Tài liệu hướng dẫn sử dụng
 ├── .gitignore
-└── src/
-    ├── core/                    # Core Engine (Driver patcher & Kernel module script)
+├── docs/                        # Tài liệu kỹ thuật & kiến trúc
+│   ├── MEMORY.md                # Lưu vết toàn bộ quyết định kiến trúc (ADR)
+│   └── AGENT.md                 # Chỉ dẫn ngữ cảnh AI Pair-Programming
+├── scripts/                     # Scripts vận hành & build tự động
+│   ├── run.sh                   # Chạy ứng dụng từ mã nguồn Python (dành cho Developer)
+│   └── build.sh                 # Tự động đóng gói lại thành file 'Kernel UART Patcher'
+└── src/                         # Mã nguồn dự án
+    ├── core/                    # Core Patch Engine
     │   ├── patch_driver.py      # Bộ tạo mã Deep Patch 5 tầng cho driver C
-    │   └── uart_kernel_patch.sh # Script quản lý biên dịch, cài đặt, an toàn module
-    └── gui/                     # Giao diện đồ họa Modern Minimalist
-        └── gui.py               # Ứng dụng GUI siêu nhỏ gọn (Ultra-Compact Widget)
+    │   └── uart_kernel_patch.sh # Script biên dịch, nạp module & quản lý tham số kernel
+    └── gui/                     # Giao diện đồ họa Modern Minimalist (PyQt6)
+        └── gui.py               # Ứng dụng điều khiển Desktop & System Tray Companion
 ```
 
 ---
 
 ## 2. Hướng Dẫn Khởi Chạy Nhanh (Quick Start)
 
-Ở thư mục gốc, chỉ cần chạy một lệnh duy nhất:
-
+### Cách 1: Chạy file độc lập (Khuyên dùng)
+Chỉ cần nhấp đúp vào file `Kernel UART Patcher` hoặc chạy từ terminal:
 ```bash
 cd ~/Desktop/Script/LinuxUART
-./run.sh
+./"Kernel UART Patcher"
+```
+*(File nhị phân 55MB độc lập, không yêu cầu cài đặt Python hay PyQt6).*
+
+### Cách 2: Chạy từ mã nguồn (Dành cho phát triển)
+```bash
+./scripts/run.sh
+```
+
+### Cách 3: Đóng gói lại file chạy sau khi sửa code
+```bash
+./scripts/build.sh
 ```
 
 **Tính năng nổi bật của GUI:**
