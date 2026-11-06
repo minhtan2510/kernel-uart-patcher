@@ -41,13 +41,13 @@ COLOR_TEXT_PRIMARY = "#0f172a"    # Slate 900 (High-contrast typography)
 COLOR_TEXT_MUTED = "#475569"      # Slate 600 (Secondary readable labels)
 COLOR_TEXT_DIM = "#94a3b8"        # Slate 400 (Placeholder / tertiary text)
 
-COLOR_EMERALD = "#065f46"         # Emerald 800 (Legible text on light pill)
-COLOR_EMERALD_BG = "#ecfdf5"      # Emerald 50 (Subtle pill fill)
-COLOR_EMERALD_BORDER = "#a7f3d0"  # Emerald 200 (Subtle pill outline)
+COLOR_EMERALD = "#047857"         # Emerald 700 (High-contrast deep green)
+COLOR_EMERALD_BG = "#dcfce7"      # Emerald 100 (Vibrant, clear status fill)
+COLOR_EMERALD_BORDER = "#10b981"  # Emerald 500 (Vivid 2px outline)
 
-COLOR_AMBER = "#92400e"           # Amber 800 (Legible text on light pill)
-COLOR_AMBER_BG = "#fffbeb"        # Amber 50 (Subtle pill fill)
-COLOR_AMBER_BORDER = "#fde68a"    # Amber 200 (Subtle pill outline)
+COLOR_AMBER = "#92400e"           # Amber 800 (Rich, readable amber text)
+COLOR_AMBER_BG = "#fef3c7"        # Amber 100 (Warm visible amber fill)
+COLOR_AMBER_BORDER = "#f59e0b"    # Amber 500 (Vivid 2px outline)
 
 COLOR_RED = "#dc2626"             # Red 600 (Danger action)
 COLOR_RED_BG = "#fef2f2"          # Red 50 (Danger hover fill)
@@ -58,7 +58,7 @@ COLOR_BLUE_BTN = "#2563eb"        # Blue 600 (Primary action)
 COLOR_BLUE_HOVER = "#1d4ed8"      # Blue 700
 
 PILL_STYLE_BASE = (
-    "border-radius: 8px; padding: 5px 14px; font-size: 12px; font-weight: bold; letter-spacing: 0.4px;"
+    "border-radius: 9px; padding: 7px 18px; font-size: 14px; font-weight: bold; letter-spacing: 0.5px;"
 )
 
 
@@ -73,7 +73,7 @@ class AnimatedToggle(QWidget):
 
     def __init__(self, parent=None, checked: bool = False):
         super().__init__(parent)
-        self.setFixedSize(46, 24)
+        self.setFixedSize(48, 26)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._checked = checked
         self._position = 1.0 if checked else 0.0
@@ -522,21 +522,21 @@ class UARTShieldApp(QWidget):
         self.card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.card.customContextMenuRequested.connect(self._show_card_context_menu)
         card_layout = QVBoxLayout(self.card)
-        card_layout.setContentsMargins(12, 12, 12, 12)
-        card_layout.setSpacing(6)
+        card_layout.setContentsMargins(14, 13, 14, 13)
+        card_layout.setSpacing(8)
 
         # Card Top Row: Status Pill (Left) + Animated Switch (Right)
         card_top = QHBoxLayout()
         self.lbl_pill = QLabel("CHECKING")
         self.lbl_pill.setStyleSheet(
-            f"background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; {PILL_STYLE_BASE}"
+            f"background: #f1f5f9; color: #64748b; border: 2px solid #cbd5e1; {PILL_STYLE_BASE}"
         )
-        card_top.addWidget(self.lbl_pill)
+        card_top.addWidget(self.lbl_pill, alignment=Qt.AlignmentFlag.AlignVCenter)
         card_top.addStretch()
 
         self.switch = AnimatedToggle()
         self.switch.toggled.connect(self._on_switch_toggled)
-        card_top.addWidget(self.switch)
+        card_top.addWidget(self.switch, alignment=Qt.AlignmentFlag.AlignVCenter)
         card_layout.addLayout(card_top)
 
         # Subtitle description
@@ -896,7 +896,7 @@ class UARTShieldApp(QWidget):
                     self.lbl_pill.setText("PATCHED ACTIVATED")
                     self.lbl_pill.setStyleSheet(
                         f"background: {COLOR_EMERALD_BG}; color: {COLOR_EMERALD}; "
-                        f"border: 1px solid {COLOR_EMERALD_BORDER}; {PILL_STYLE_BASE}"
+                        f"border: 2px solid {COLOR_EMERALD_BORDER}; {PILL_STYLE_BASE}"
                     )
                     self.lbl_desc.setText("Hardware resets blocked (DTR held HIGH)")
                     self.switch.setChecked(True)
@@ -907,7 +907,7 @@ class UARTShieldApp(QWidget):
                     self.lbl_pill.setText("PATCHED INACTIVE")
                     self.lbl_pill.setStyleSheet(
                         f"background: {COLOR_AMBER_BG}; color: {COLOR_AMBER}; "
-                        f"border: 1px solid {COLOR_AMBER_BORDER}; {PILL_STYLE_BASE}"
+                        f"border: 2px solid {COLOR_AMBER_BORDER}; {PILL_STYLE_BASE}"
                     )
                     self.lbl_desc.setText("Default Linux mode (DTR asserts on connect)")
                     self.switch.setChecked(False)
@@ -946,7 +946,7 @@ class UARTShieldApp(QWidget):
         self.current_protected = False
         self.lbl_pill.setText("SYSTEM DEFAULT")
         self.lbl_pill.setStyleSheet(
-            f"background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; {PILL_STYLE_BASE}"
+            f"background: #f1f5f9; color: #1e293b; border: 2px solid #94a3b8; {PILL_STYLE_BASE}"
         )
         self.lbl_desc.setText(f"'{driver}' unpatched. Patch driver to block serial resets.")
         self.switch.setChecked(False, animated=False)
@@ -971,7 +971,7 @@ class UARTShieldApp(QWidget):
         self.port_warning.hide()
         self.lbl_pill.setText("NO DEVICE")
         self.lbl_pill.setStyleSheet(
-            f"background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; {PILL_STYLE_BASE}"
+            f"background: #f8fafc; color: #64748b; border: 1.5px solid #cbd5e1; {PILL_STYLE_BASE}"
         )
         self.lbl_desc.setText("Connect a USB-UART adapter or gimbal.")
         self.switch.setChecked(False, animated=False)
