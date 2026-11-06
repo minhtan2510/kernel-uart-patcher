@@ -652,35 +652,29 @@ class UARTShieldApp(QWidget):
         # 1. Action header
         if re.match(r"^\[ACTION\]", body):
             return (
-                f"<div style=\"margin-top: 6px; margin-bottom: 2px; "
+                f"<div style=\"margin-top: 4px; margin-bottom: 2px; "
                 f"color: #1d4ed8; font-weight: bold;\">▶ {escaped_body}</div>"
             )
 
-        # 2. Terminal Success banner
+        # 2. Terminal Success
         if re.match(r"^\[(DONE|SUCCESS)\]", body):
             return (
-                f"<div style=\"margin: 4px 0px; padding: 4px 8px; "
-                f"background-color: #ecfdf5; border: 1px solid #a7f3d0; "
-                f"color: #15803d; font-weight: bold; border-radius: 6px;\">"
-                f"✓ {escaped_body}</div>"
+                f"{indent_prefix}<span style=\"color: #15803d; font-weight: bold;\">"
+                f"✓ {escaped_body}</span>"
             )
 
-        # 3. Terminal Failure banner
+        # 3. Terminal Failure
         if re.match(r"^(\[(FAIL|ERROR)\]|Error\b)", body):
             return (
-                f"<div style=\"margin: 4px 0px; padding: 4px 8px; "
-                f"background-color: #fef2f2; border: 1px solid #fecaca; "
-                f"color: #b91c1c; font-weight: bold; border-radius: 6px;\">"
-                f"✗ {escaped_body}</div>"
+                f"{indent_prefix}<span style=\"color: #dc2626; font-weight: bold;\">"
+                f"✗ {escaped_body}</span>"
             )
 
         # 4. Cancel notice
         if re.match(r"^\[CANCEL\]", body):
             return (
-                f"<div style=\"margin: 3px 0px; padding: 3px 6px; "
-                f"background-color: #f1f5f9; border: 1px solid #e2e8f0; "
-                f"color: #64748b; font-weight: bold; border-radius: 4px;\">"
-                f"⊘ {escaped_body}</div>"
+                f"{indent_prefix}<span style=\"color: #64748b; font-weight: bold;\">"
+                f"⊘ {escaped_body}</span>"
             )
 
         # 5. Step OK
