@@ -323,6 +323,8 @@
    - Do NOT pipe `lsmod | grep <module>` directly under `set -e` as `grep` returning non-zero causes immediate script termination. Instead check `[ -d "/sys/module/<mod>" ]`.
 3. **Core Preservation Rule:**
    - Files in [`src/core/`](file:///home/minhtan/Desktop/Script/LinuxUART/src/core) are tested, verified, and committed. Do NOT modify core logic unless explicitly authorized by the user.
+4. **Remote Push Policy:**
+   - NEVER run `git push` (branches or tags) to remote repositories automatically unless the user explicitly requests or commands it. All commits must remain local until instructed.
 
 ---
 
