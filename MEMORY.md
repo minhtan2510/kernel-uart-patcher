@@ -205,6 +205,25 @@
   - Retained rigid fixed-size enforcement (`setFixedSize(520, 520)`) per user requirement to preserve widget layout stability and compact floating tool ergonomics.
 * **Consequences:** All primary status, milestone, and outcome log lines render completely on a single unbroken line while preserving the compact, distraction-free control panel footprint.
 
+### ADR-19: Pipeline Step Log Architecture for Patch and Restore Operations
+* **Status:** Accepted (2026-11-06)
+* **Context:** Previously, the core script printed 15-20 unnumbered verbose log lines during patching and restoration (internal path locations, temporary unbind/unload chatter, static feature descriptions), which cluttered the console and buried critical step milestones.
+* **Decision:**
+  - Refactored `cmd_patch()` into 4 distinct numbered milestones:
+    - `[1/4] Preparing kernel source (<stem>.c)... [OK]`
+    - `[2/4] Applying DTR/RTS reset shield patch... [OK]`
+    - `[3/4] Compiling kernel module (<stem>.ko)... [OK]`
+    - `[4/4] Installing & activating in kernel RAM... [OK]`
+    - `[DONE] Driver '<module>' patched successfully (PATCH ACTIVE).`
+  - Refactored `cmd_restore()` into 3 distinct numbered milestones:
+    - `[1/3] Unloading patched driver from RAM... [OK]` (or `Recovering stock driver from Ubuntu APT... [OK]` if backup missing)
+    - `[2/3] Restoring original stock driver file... [OK]`
+    - `[3/3] Reloading factory kernel module... [OK]`
+    - `[DONE] Original Ubuntu driver restored (SYSTEM DEFAULT).`
+  - Internal low-level messages redirected to `detail()` helper, activated only when `-v` or `--verbose` is specified.
+  - Enhanced `_format_log_line()` in PyQt GUI to parse `m_step_ok` (`✓ [OK]`) and `m_step_err` (`✗ [ERR]`) with high-contrast formatting on pure white background.
+* **Consequences:** Operations fit within 5-6 clean single lines in the 520x520 console without scrolling. Users see immediate progress awareness and exact point of failure if an error occurs.
+
 ---
 
 ## 3. Known Gotchas & Constraints
