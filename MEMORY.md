@@ -150,6 +150,25 @@
      - Upgraded typography and padding (`PILL_STYLE_BASE`: 12px bold, 5px 14px padding, 8px radius).
 * **Consequences:** Clean visual hierarchy; zero button redundancy; focus remains 100% on the toggle switch when protected; developer rebuild options remain readily accessible via shortcut and context menu.
 
+### [2026-11-06] ADR-15: Modern Semantic Terminal Log Console with Visual Outcome Banners
+* **Context:** The activity log previously rendered all messages in monochrome gray inside a white box. Success, errors, build steps, and action triggers looked identical, making it difficult for users to visually confirm whether long operations (patching, compiling, restoring) succeeded or failed.
+* **Decision:**
+  1. **Dark Slate Terminal Console (`#0b0f19`):**
+     - Shifted `QPlainTextEdit` background to authentic developer dark slate `#0b0f19` with subtle border `#1e293b`.
+     - Monospaced typography with crisp rendering and comfortable padding (`8px 10px`).
+     - Minimalist dark vertical scrollbar styling.
+  2. **Semantic Color & Outcome Highlighting:**
+     - **Action Header (`[ACTION]`):** Highlighted in vibrant blue (`#60a5fa`) with prefix `▶`.
+     - **Success Banner (`[DONE]` / `[SUCCESS]`):** Prominent emerald banner with dark green fill (`#064e3b`), green border (`#059669`), and bright text (`#6ee7b7`) with prefix `✓`.
+     - **Failure Banner (`[FAIL]` / `[ERROR]`):** Prominent crimson banner with dark red fill (`#450a0a`), red border (`#dc2626`), and bright text (`#fca5a5`) with prefix `✗`.
+     - **Milestone Steps (`[OK]`):** Neon emerald (`#34d399`) with checkmark `✓`.
+     - **Step Errors (`[ERR]`):** Neon red (`#f87171`) with crossmark `✗`.
+     - **Warnings (`[WARN]`, `[!!]`):** Amber (`#fbbf24`) with warning sign `⚠`.
+     - **Background/Compiler Output:** Soft muted slate (`#64748b` for indented lines, `#cbd5e1` for body text).
+  3. **Auto-Scrolling:**
+     - Dynamically scrolls `QPlainTextEdit` to the maximum vertical scroll value upon each new line appended.
+* **Consequences:** Instant visual comprehension of operation outcomes from across the room; zero ambiguity between successful kernel builds and compilation failures; clean terminal aesthetic suitable for embedded systems developers.
+
 ---
 
 ## 3. Known Gotchas & Constraints

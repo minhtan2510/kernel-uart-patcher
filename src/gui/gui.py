@@ -11,6 +11,7 @@ import os
 import sys
 import subprocess
 import re
+import html
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
@@ -423,28 +424,28 @@ class UARTShieldApp(QWidget):
                 border: 1px solid #e2e8f0;
             }
             QPlainTextEdit {
-                background-color: #f8fafc;
-                color: #334155;
-                border: 1px solid #cbd5e1;
+                background-color: #0b0f19;
+                color: #cbd5e1;
+                border: 1px solid #1e293b;
                 border-radius: 8px;
-                padding: 6px;
-                font-family: 'SF Mono', 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+                padding: 8px 10px;
+                font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace;
                 font-size: 11px;
             }
             QScrollBar:vertical {
                 border: none;
-                background: transparent;
+                background: #0b0f19;
                 width: 6px;
                 margin: 2px 2px 2px 0px;
                 border-radius: 3px;
             }
             QScrollBar::handle:vertical {
-                background: #cbd5e1;
+                background: #334155;
                 min-height: 24px;
                 border-radius: 3px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #94a3b8;
+                background: #475569;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -616,10 +617,104 @@ class UARTShieldApp(QWidget):
 
     def log(self, message: str):
         """
-        @brief Append message to activity log.
-        @param message Text string.
+        @brief Append message to activity log with semantic color coding.
+        @param message Raw text string.
         """
-        self.txt_log.appendPlainText(message)
+        lines = message.splitlines()
+        if not lines:
+            self.txt_log.appendHtml("<div style=\"height: 4px;\"></div>")
+            return
+
+        for line in lines:
+            html_line = self._format_log_line(line)
+            self.txt_log.appendHtml(html_line)
+
+        # Auto-scroll to latest entry
+        scrollbar = self.txt_log.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+
+    def _format_log_line(self, line: str) -> str:
+        """
+        @brief Convert a plain text log line into styled HTML with semantic colors.
+        @param line Raw text string.
+        @return Styled HTML snippet.
+        """
+        line_clean = line.strip("\r\n")
+        if not line_clean.strip():
+            return "<div style=\"height: 4px;\"></div>"
+
+        indent_match = re.match(r"^(\s+)", line_clean)
+        indent_spaces = len(indent_match.group(1)) if indent_match else 0
+        indent_prefix = "&nbsp;" * indent_spaces
+        body = line_clean.lstrip()
+        escaped_body = html.escape(body)
+
+        # 1. Action header
+        if re.match(r"^\[ACTION\]", body):
+            return (
+                f"<div style=\"margin-top: 6px; margin-bottom: 2px; "
+                f"color: #60a5fa; font-weight: bold;\">▶ {escaped_body}</div>"
+            )
+
+        # 2. Terminal Success banner
+        if re.match(r"^\[(DONE|SUCCESS)\]", body):
+            return (
+                f"<div style=\"margin: 4px 0px; padding: 4px 8px; "
+                f"background-color: #064e3b; border: 1px solid #059669; "
+                f"color: #6ee7b7; font-weight: bold; border-radius: 5px;\">"
+                f"✓ {escaped_body}</div>"
+            )
+
+        # 3. Terminal Failure banner
+        if re.match(r"^(\[(FAIL|ERROR)\]|Error\b)", body):
+            return (
+                f"<div style=\"margin: 4px 0px; padding: 4px 8px; "
+                f"background-color: #450a0a; border: 1px solid #dc2626; "
+                f"color: #fca5a5; font-weight: bold; border-radius: 5px;\">"
+                f"✗ {escaped_body}</div>"
+            )
+
+        # 4. Cancel notice
+        if re.match(r"^\[CANCEL\]", body):
+            return (
+                f"<div style=\"margin: 3px 0px; padding: 3px 6px; "
+                f"background-color: #1e293b; border: 1px solid #334155; "
+                f"color: #94a3b8; font-weight: bold; border-radius: 4px;\">"
+                f"⊘ {escaped_body}</div>"
+            )
+
+        # 5. Step OK
+        if re.match(r"^\[OK\]", body):
+            return (
+                f"{indent_prefix}<span style=\"color: #34d399; font-weight: bold;\">"
+                f"✓ {escaped_body}</span>"
+            )
+
+        # 6. Step Error
+        if re.match(r"^\[ERR\]", body):
+            return (
+                f"{indent_prefix}<span style=\"color: #f87171; font-weight: bold;\">"
+                f"✗ {escaped_body}</span>"
+            )
+
+        # 7. Step Warning
+        if re.match(r"^(\[WARN\]|\[\!\!\])", body):
+            return (
+                f"{indent_prefix}<span style=\"color: #fbbf24; font-weight: bold;\">"
+                f"⚠ {escaped_body}</span>"
+            )
+
+        # 8. Step Info
+        if re.match(r"^\[INFO\]", body):
+            return (
+                f"{indent_prefix}<span style=\"color: #38bdf8; font-weight: bold;\">"
+                f"ℹ {escaped_body}</span>"
+            )
+
+        # 9. Standard info / compiler chatter
+        if indent_spaces > 0:
+            return f"{indent_prefix}<span style=\"color: #64748b;\">{escaped_body}</span>"
+        return f"<span style=\"color: #cbd5e1;\">{escaped_body}</span>"
 
     def set_operating(self, operating: bool, task_name: str = ""):
         """
