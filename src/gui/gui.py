@@ -269,15 +269,19 @@ class CommandWorker(QThread):
                 bufsize=1
             )
             ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+            has_done = False
             for line in proc.stdout:
                 clean = ansi_escape.sub('', line.rstrip())
+                if clean.startswith("[DONE]"):
+                    has_done = True
                 self.log_signal.emit(clean)
 
             proc.wait()
             rc = proc.returncode
 
             if rc == 0:
-                self.log_signal.emit(f"[DONE] {self.task_name} succeeded.")
+                if not has_done:
+                    self.log_signal.emit(f"[DONE] {self.task_name} succeeded.")
                 self.finished_signal.emit(True, f"✓ {self.task_name} succeeded.")
             elif rc in (126, 127):
                 self.log_signal.emit(f"[CANCEL] {self.task_name} cancelled by user.")
@@ -677,35 +681,53 @@ class UARTShieldApp(QWidget):
                 f"⊘ {escaped_body}</span>"
             )
 
-        # 5. Step OK
+        # 5. Pipeline Step with [OK] or [DONE] suffix
+        m_step_ok = re.match(r"^(\[\d+/\d+\].*?)(?:✓\s*)?\[(?:OK|DONE)\]$", body)
+        if m_step_ok:
+            step_desc = html.escape(m_step_ok.group(1).rstrip())
+            return (
+                f"{indent_prefix}<span style=\"color: #334155;\">{step_desc}</span> "
+                f"<span style=\"color: #15803d; font-weight: bold;\">✓ [OK]</span>"
+            )
+
+        # 6. Pipeline Step with [ERR] or [FAIL] suffix
+        m_step_err = re.match(r"^(\[\d+/\d+\].*?)(?:✗\s*)?\[(?:ERR|FAIL)\]$", body)
+        if m_step_err:
+            step_desc = html.escape(m_step_err.group(1).rstrip())
+            return (
+                f"{indent_prefix}<span style=\"color: #334155;\">{step_desc}</span> "
+                f"<span style=\"color: #dc2626; font-weight: bold;\">✗ [ERR]</span>"
+            )
+
+        # 7. Step OK
         if re.match(r"^\[OK\]", body):
             return (
                 f"{indent_prefix}<span style=\"color: #16a34a; font-weight: bold;\">"
                 f"✓ {escaped_body}</span>"
             )
 
-        # 6. Step Error
+        # 8. Step Error
         if re.match(r"^\[ERR\]", body):
             return (
                 f"{indent_prefix}<span style=\"color: #dc2626; font-weight: bold;\">"
                 f"✗ {escaped_body}</span>"
             )
 
-        # 7. Step Warning
+        # 9. Step Warning
         if re.match(r"^(\[WARN\]|\[\!\!\])", body):
             return (
                 f"{indent_prefix}<span style=\"color: #b45309; font-weight: bold;\">"
                 f"⚠ {escaped_body}</span>"
             )
 
-        # 8. Step Info
+        # 10. Step Info
         if re.match(r"^\[INFO\]", body):
             return (
-                f"{indent_prefix}<span style=\"color: #0284c7; font-weight: bold;\">"
+                f"{indent_prefix}<span style=\"color: #0284c7;\">"
                 f"ℹ {escaped_body}</span>"
             )
 
-        # 9. Standard info / compiler chatter
+        # 11. Standard info / compiler chatter
         if indent_spaces > 0:
             return f"{indent_prefix}<span style=\"color: #64748b;\">{escaped_body}</span>"
         return f"<span style=\"color: #334155;\">{escaped_body}</span>"

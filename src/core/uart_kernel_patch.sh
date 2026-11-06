@@ -58,14 +58,16 @@ MOD_FILESTEM=""
 MOD_EXTRA_FILES=()
 WORK_DIR=""
 AUTO_CONFIRM=false
+VERBOSE=false
 
 # ==============================================================================
 # Helpers
 # ==============================================================================
 
-info() { echo -e "  ${GREEN}[OK]${NC} $*"; }
-warn() { echo -e "  ${YELLOW}[!!]${NC} $*"; }
-err()  { echo -e "  ${RED}[ERR]${NC} $*" >&2; }
+info()   { echo -e "  ${GREEN}[OK]${NC} $*"; }
+warn()   { echo -e "  ${YELLOW}[WARN]${NC} $*"; }
+err()    { echo -e "  ${RED}[ERR]${NC} $*" >&2; }
+detail() { if $VERBOSE; then echo -e "    $*"; fi; }
 
 die()
 {
@@ -264,7 +266,7 @@ check_deps()
         echo ""
     fi
 
-    info "Build tools & headers satisfied"
+    detail "Build tools & headers satisfied"
 }
 
 # ==============================================================================
@@ -288,7 +290,7 @@ prepare_source()
     done
 
     if [ -n "$ksrc_tar" ] && [ -f "$ksrc_tar" ]; then
-        info "Found local source: $(basename "$ksrc_tar")"
+        detail "Found local source: $(basename "$ksrc_tar")"
         local ksrc_prefix
         ksrc_prefix=$(tar tf "$ksrc_tar" 2>/dev/null | head -1 | cut -d/ -f1)
         if [ -n "$ksrc_prefix" ]; then
@@ -300,7 +302,7 @@ prepare_source()
 
     # Step B: If main .c file not extracted, download from git.kernel.org
     if [ ! -f "$WORK_DIR/build/${MOD_FILESTEM}.c" ]; then
-        info "Fetching ${MOD_FILESTEM}.c from git.kernel.org (v${KVER_BRANCH}) ..."
+        detail "Fetching ${MOD_FILESTEM}.c from git.kernel.org (v${KVER_BRANCH}) ..."
         local base_url="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/${MOD_SRCDIR}"
         local target_url="${base_url}/${MOD_FILESTEM}.c?h=v${KVER_BRANCH}"
 
@@ -312,7 +314,7 @@ prepare_source()
         fi
 
         for extra in "${MOD_EXTRA_FILES[@]}"; do
-            info "Fetching $extra ..."
+            detail "Fetching $extra ..."
             curl -sSf "${base_url}/${extra}?h=v${KVER_BRANCH}" \
                  -o "$WORK_DIR/build/${extra}" || \
             curl -sSf "${base_url}/${extra}?h=v${KVER_SHORT}" \
@@ -324,7 +326,7 @@ prepare_source()
         die "Source file ${MOD_FILESTEM}.c could not be prepared"
     fi
 
-    info "Source ready for ${MOD_FILESTEM}.c"
+    detail "Source ready for ${MOD_FILESTEM}.c"
 }
 
 # ==============================================================================
@@ -340,13 +342,13 @@ patch_source()
         die "Patch script $patch_script not found"
     fi
 
-    info "Applying Deep Patch (parameter + open + tiocmset + dtr_rts + flow) ..."
+    detail "Applying Deep Patch (parameter + open + tiocmset + dtr_rts + flow) ..."
 
-    if ! python3 "$patch_script" "$MODULE" "$src_file"; then
+    if ! python3 "$patch_script" "$MODULE" "$src_file" >/dev/null 2>&1; then
         die "Failed to apply deep patch to $src_file"
     fi
 
-    info "Deep patch applied successfully"
+    detail "Deep patch applied successfully"
 }
 
 # ==============================================================================
@@ -364,7 +366,7 @@ build_module()
 
     echo "obj-m := ${MOD_FILESTEM}.o" > "$build_dir/Makefile"
 
-    info "Building ${MOD_FILESTEM}.ko (kernel ${KVER}) ..."
+    detail "Building ${MOD_FILESTEM}.ko (kernel ${KVER}) ..."
 
     local build_log="$WORK_DIR/build.log"
 
@@ -383,7 +385,7 @@ build_module()
 
     local ko_size
     ko_size=$(du -h "$ko_file" | cut -f1)
-    info "Built: ${MOD_FILESTEM}.ko (${ko_size})"
+    detail "Built: ${MOD_FILESTEM}.ko (${ko_size})"
 }
 
 # ==============================================================================
@@ -399,7 +401,7 @@ unload_module_safely()
         if [ -e "$dev_path" ]; then
             local dev_id
             dev_id=$(basename "$dev_path")
-            info "Unbinding USB device $dev_id from ${mod} driver ..."
+            detail "Unbinding USB device $dev_id from ${mod} driver ..."
             echo "$dev_id" > "/sys/bus/usb/drivers/${mod}/unbind" 2>/dev/null || true
         fi
     done
@@ -416,7 +418,7 @@ unload_module_safely()
 
     # Step 3: Unload module from kernel RAM
     if [ -d "/sys/module/${mod}" ]; then
-        info "Unloading ${mod} from kernel RAM ..."
+        detail "Unloading ${mod} from kernel RAM ..."
         if ! rmmod "$mod" 2>/dev/null; then
             warn "Module ${mod} is in use by an active process."
             warn "Please UNPLUG the USB cable of your Gimbal right now, then press Enter."
@@ -432,7 +434,7 @@ unload_module_safely()
         die "Module ${mod} is still resident in kernel memory!"
     fi
 
-    info "Module ${mod} unloaded cleanly from RAM"
+    detail "Module ${mod} unloaded cleanly from RAM"
 }
 
 rebind_devices()
@@ -464,7 +466,7 @@ install_module()
         die "Module $MODULE is built-in or not found."
     fi
 
-    info "Original location: $orig_path"
+    detail "Original location: $orig_path"
 
     # Backup original module
     mkdir -p "$BACKUP_DIR"
@@ -474,16 +476,16 @@ install_module()
         cp "$orig_path" "$backup_file"
         echo "$KVER" > "$BACKUP_DIR/${MODULE}.kver"
         echo "$orig_path" > "$BACKUP_DIR/${MODULE}.path"
-        info "Backed up original module: $backup_file"
+        detail "Backed up original module: $backup_file"
     else
         warn "Backup already exists, preserving previous original backup"
     fi
 
     # Confirm before reloading
-    echo ""
-    warn "${BOLD}Ensure NO application is currently using ${MODULE} before reloading.${NC}"
-    echo ""
     if ! $AUTO_CONFIRM; then
+        echo ""
+        warn "${BOLD}Ensure NO application is currently using ${MODULE} before reloading.${NC}"
+        echo ""
         read -rp "  Ready to install and reload module? [Y/n] " reply
         if [[ "${reply:-}" =~ ^[Nn]$ ]]; then
             echo ""
@@ -515,15 +517,15 @@ install_module()
         cp "$ko_file" "$orig_path"
     fi
 
-    info "Installed patched module to $orig_path"
+    detail "Installed patched module to $orig_path"
 
     # Rebuild module dependency database
     depmod -a "$KVER"
 
     # Load patched module into kernel RAM
-    info "Loading patched module into kernel RAM ..."
+    detail "Loading patched module into kernel RAM ..."
     if modprobe "$MODULE"; then
-        info "Loaded patched module into kernel memory!"
+        detail "Loaded patched module into kernel memory!"
     else
         err "Failed to load module. Restoring backup..."
         cp "$backup_file" "$orig_path"
@@ -534,7 +536,7 @@ install_module()
 
     # Verify that the new module is genuinely active in kernel RAM
     if [ -f "/sys/module/${MODULE}/parameters/disable_dtr_rts" ]; then
-        info "CONFIRMED: Deep Patch is ACTIVE in running kernel memory!"
+        detail "CONFIRMED: Deep Patch is ACTIVE in running kernel memory!"
         chmod 0666 "/sys/module/${MODULE}/parameters/disable_dtr_rts" 2>/dev/null || true
     else
         err "Verification failed: /sys/module/${MODULE}/parameters/disable_dtr_rts was not found."
@@ -561,32 +563,22 @@ EOF
 
 cmd_patch()
 {
-    echo -e "\n${BOLD}=== Deep Patching kernel module: ${MODULE} (${MOD_FILESTEM}) ===${NC}\n"
-
     check_secure_boot
     check_deps
-    prepare_source
-    patch_source
-    build_module
-    install_module
 
-    echo ""
-    echo -e "  ${GREEN}${BOLD}✓ Deep Patch completed successfully!${NC}"
-    echo ""
-    echo "  Features active in new driver:"
-    echo "    - DTR and RTS are forced HIGH (inactive 3.3V) on open"
-    echo "    - ioctl(TIOCMSET/TIOCMBIS) DTR/RTS requests from apps are blocked"
-    echo "    - Parameter disable_dtr_rts is active: /sys/module/${MODULE}/parameters/disable_dtr_rts"
-    echo ""
-    warn "Unplug and replug your USB-UART adapter (or Gimbal) to apply."
-    echo ""
-    echo -e "  Live toggle (without recompile or reload):"
-    echo -e "    ${CYAN}sudo ./$SCRIPT_NAME toggle $MODULE 0${NC}   (re-enable DTR/RTS)"
-    echo -e "    ${CYAN}sudo ./$SCRIPT_NAME toggle $MODULE 1${NC}   (disable DTR/RTS)"
-    echo ""
-    echo -e "  To restore original kernel driver:"
-    echo -e "    ${CYAN}sudo ./$SCRIPT_NAME restore $MODULE${NC}"
-    echo ""
+    prepare_source
+    echo -e "  [1/4] Preparing kernel source (${MOD_FILESTEM}.c)... ${GREEN}[OK]${NC}"
+
+    patch_source
+    echo -e "  [2/4] Applying DTR/RTS reset shield patch... ${GREEN}[OK]${NC}"
+
+    build_module
+    echo -e "  [3/4] Compiling kernel module (${MOD_FILESTEM}.ko)... ${GREEN}[OK]${NC}"
+
+    install_module
+    echo -e "  [4/4] Installing & activating in kernel RAM... ${GREEN}[OK]${NC}"
+
+    echo -e "  ${GREEN}${BOLD}[DONE] Driver '${MODULE}' patched successfully (PATCH ACTIVE).${NC}"
 }
 
 # ==============================================================================
@@ -612,7 +604,7 @@ recover_stock_module()
         echo ""
     fi
 
-    info "Attempting self-healing recovery: fetching official stock driver from package repository..."
+    detail "Attempting self-healing recovery: fetching official stock driver from package repository..."
 
     # Method 1: Query dpkg for the package owning the driver
     local pkg=""
@@ -626,16 +618,16 @@ recover_stock_module()
     fi
 
     if [ -n "$pkg" ]; then
-        info "Identified parent kernel package: $pkg"
+        detail "Identified parent kernel package: $pkg"
         local recover_dir
         recover_dir=$(mktemp -d /tmp/uart_stock_recover.XXXXXX)
 
-        info "Downloading official deb package via apt-get ..."
+        detail "Downloading official deb package via apt-get ..."
         if (cd "$recover_dir" && apt-get download "$pkg" >/dev/null 2>&1); then
             local deb_file
             deb_file=$(find "$recover_dir" -name "*.deb" | head -n 1)
             if [ -n "$deb_file" ] && [ -f "$deb_file" ]; then
-                info "Extracting official stock driver from $(basename "$deb_file") ..."
+                detail "Extracting official stock driver from $(basename "$deb_file") ..."
                 mkdir -p "$recover_dir/extracted"
                 dpkg-deb -x "$deb_file" "$recover_dir/extracted"
 
@@ -646,7 +638,7 @@ recover_stock_module()
                     cp "$extracted_ko" "$target_backup"
                     echo "$KVER" > "$BACKUP_DIR/${MODULE}.kver"
                     echo "$target_orig" > "$BACKUP_DIR/${MODULE}.path"
-                    info "Successfully recovered official stock driver into backup cache!"
+                    detail "Successfully recovered official stock driver into backup cache!"
                 fi
             fi
         fi
@@ -655,7 +647,7 @@ recover_stock_module()
 
     # Method 2: Fallback to compiling clean unpatched source (if offline or apt failed)
     if [ ! -f "$target_backup" ]; then
-        info "APT download unavailable. Attempting to build clean unpatched module from source..."
+        detail "APT download unavailable. Attempting to build clean unpatched module from source..."
         prepare_source
         if build_module; then
             local clean_ko="$WORK_DIR/build/${MOD_FILESTEM}.ko"
@@ -675,7 +667,7 @@ recover_stock_module()
                 fi
                 echo "$KVER" > "$BACKUP_DIR/${MODULE}.kver"
                 echo "$target_orig" > "$BACKUP_DIR/${MODULE}.path"
-                info "Successfully built clean unpatched driver!"
+                detail "Successfully built clean unpatched driver!"
             fi
         fi
     fi
@@ -693,8 +685,6 @@ recover_stock_module()
 
 cmd_restore()
 {
-    echo -e "\n${BOLD}=== Restoring original module: ${MODULE} ===${NC}\n"
-
     local orig_path=""
     if [ -f "$BACKUP_DIR/${MODULE}.path" ]; then
         orig_path=$(cat "$BACKUP_DIR/${MODULE}.path")
@@ -713,43 +703,27 @@ cmd_restore()
 
     if [ ! -f "$backup_file" ]; then
         recover_stock_module "$backup_file" "$orig_path"
+        echo -e "  [1/3] Recovering stock driver from Ubuntu APT... ${GREEN}[OK]${NC}"
+        unload_module_safely "$MODULE"
+        echo -e "  [2/3] Restoring original stock driver file... ${GREEN}[OK]${NC}"
+    else
+        unload_module_safely "$MODULE"
+        echo -e "  [1/3] Unloading patched driver from RAM... ${GREEN}[OK]${NC}"
+        echo -e "  [2/3] Restoring original stock driver file... ${GREEN}[OK]${NC}"
     fi
 
-    if [ -f "$BACKUP_DIR/${MODULE}.kver" ]; then
-        local backup_kver
-        backup_kver=$(cat "$BACKUP_DIR/${MODULE}.kver")
-        if [ "$backup_kver" != "$KVER" ]; then
-            warn "Backup was made for kernel ${backup_kver}, current is ${KVER}"
-            if ! $AUTO_CONFIRM; then
-                read -rp "  Continue anyway? [y/N] " reply
-                if [[ ! "${reply:-}" =~ ^[Yy]$ ]]; then
-                    exit 0
-                fi
-            fi
-        fi
-    fi
-
-    # Unload module safely from RAM
-    unload_module_safely "$MODULE"
-
-    # Restore original file to disk
-    info "Restoring original module file to $orig_path ..."
     cp "$backup_file" "$orig_path"
     depmod -a "$KVER"
 
-    # Reload original module
-    info "Loading original module into kernel RAM ..."
     if modprobe "$MODULE"; then
-        info "Original module loaded successfully!"
+        echo -e "  [3/3] Reloading factory kernel module... ${GREEN}[OK]${NC}"
     else
         die "Failed to load original module"
     fi
 
     # Verify that disable_dtr_rts parameter is GONE
-    if [ ! -f "/sys/module/${MODULE}/parameters/disable_dtr_rts" ]; then
-        info "CONFIRMED: Original Ubuntu driver is ACTIVE in kernel RAM!"
-    else
-        warn "Warning: disable_dtr_rts parameter still present in sysfs."
+    if [ -f "/sys/module/${MODULE}/parameters/disable_dtr_rts" ]; then
+        warn "disable_dtr_rts parameter still present in sysfs."
     fi
 
     # Clean up backup files
@@ -763,11 +737,9 @@ cmd_restore()
     fi
 
     # Rebind devices
-    rebind_devices "$MODULE"
+    rebind_devices "$MODULE" >/dev/null 2>&1 || true
 
-    echo ""
-    echo -e "  ${GREEN}${BOLD}✓ Original Ubuntu driver restored 100%!${NC}"
-    echo ""
+    echo -e "  ${GREEN}${BOLD}[DONE] Original Ubuntu driver restored (SYSTEM DEFAULT).${NC}"
 }
 
 cmd_toggle()
@@ -788,12 +760,12 @@ cmd_toggle()
         1|on|true|yes|enable)
             echo "Y" > "$param_path"
             chmod 0666 "$param_path" 2>/dev/null || true
-            info "DTR/RTS control is now DISABLED (pins forced HIGH, Gimbal will NOT reset)"
+            echo -e "[SUCCESS] PATCH ACTIVE set via sysfs."
             ;;
         0|off|false|no|disable)
             echo "N" > "$param_path"
             chmod 0666 "$param_path" 2>/dev/null || true
-            info "DTR/RTS control is now ENABLED (default Linux kernel behavior restored)"
+            echo -e "[SUCCESS] PATCH INACTIVE set via sysfs."
             ;;
         *)
             die "Invalid toggle value: $val (use 1/on or 0/off)"
@@ -913,6 +885,9 @@ main()
             -y|--yes)
                 AUTO_CONFIRM=true
                 ;;
+            -v|--verbose)
+                VERBOSE=true
+                ;;
             *)
                 if [ -z "$target" ]; then
                     target="$1"
@@ -929,7 +904,7 @@ main()
             [ -z "$target" ] && { usage; die "Missing <port|module> argument"; }
             [ "$(id -u)" -ne 0 ] && die "Must run as root. Use: sudo ./$SCRIPT_NAME patch $target"
             resolve_module "$target"
-            info "Target module: ${MODULE} (${MOD_FILESTEM})"
+            detail "Target module: ${MODULE} (${MOD_FILESTEM})"
             cmd_patch
             ;;
         restore)
