@@ -14,7 +14,7 @@ import re
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
-    QStyledItemDelegate, QStyleOptionViewItem
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
@@ -182,8 +182,8 @@ class PortItemDelegate(QStyledItemDelegate):
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
 
-        is_selected = bool(opt.state & QStyleOptionViewItem.StyleOptionState.State_Selected)
-        is_hover = bool(opt.state & QStyleOptionViewItem.StyleOptionState.State_MouseOver)
+        is_selected = bool(opt.state & QStyle.StateFlag.State_Selected)
+        is_hover = bool(opt.state & QStyle.StateFlag.State_MouseOver)
 
         rect = opt.rect
         row_rect = rect.adjusted(4, 2, -4, -2)
@@ -198,7 +198,7 @@ class PortItemDelegate(QStyledItemDelegate):
         painter.setFont(opt.font)
         painter.setPen(QColor("#0f172a"))
         text_rect = rect.adjusted(12, 0, -12, 0)
-        painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), index.data())
+        painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), str(index.data() or ""))
         painter.restore()
 
 
