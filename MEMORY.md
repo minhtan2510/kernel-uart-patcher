@@ -192,6 +192,9 @@
   - Automatically fetches the official deb package via `apt-get download "$pkg"`, extracts only the pristine stock `.ko` file via `dpkg-deb -x`, and populates the backup cache before completing the restore.
   - Secondary fallback: If APT/network is unavailable, compiles clean unpatched source directly via `prepare_source` + `build_module` (matching module compression `.ko`, `.zst`, `.xz`, `.gz`).
   - Automatically adapts to any supported driver (`cp210x`, `ch341`, `ftdi_sio`, `pl2303`, `cdc_acm`).
+  - Prompts user confirmation explicitly before performing APT recovery:
+    - In GUI: Displays dedicated `QMessageBox.question` warning that local backup is missing and asking to download stock driver from Ubuntu APT.
+    - In CLI: Prompts interactive confirmation `read -rp` unless `-y` is supplied.
 * **Consequences:** Eliminates single-point-of-failure on backup files. Restore operations always succeed even if user purged backups.
 
 ---
