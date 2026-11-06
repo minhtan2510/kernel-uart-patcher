@@ -535,10 +535,20 @@ install_module()
     # Verify that the new module is genuinely active in kernel RAM
     if [ -f "/sys/module/${MODULE}/parameters/disable_dtr_rts" ]; then
         info "CONFIRMED: Deep Patch is ACTIVE in running kernel memory!"
+        chmod 0666 "/sys/module/${MODULE}/parameters/disable_dtr_rts" 2>/dev/null || true
     else
         warn "Module loaded but /sys/module/${MODULE}/parameters/disable_dtr_rts not found."
         warn "You may need to unplug the USB cable and run: sudo rmmod ${MODULE} && sudo modprobe ${MODULE}"
     fi
+
+    # Install persistent udev rule so parameter stays writable without root password
+    local udev_file="/etc/udev/rules.d/99-kernel-uart-patcher.rules"
+    cat << 'EOF' > "$udev_file"
+# Kernel UART Patcher: allow userspace to toggle DTR/RTS protection without root password
+ACTION=="add", SUBSYSTEM=="module", KERNEL=="cp210x|ch341|ftdi_sio|pl2303|cdc_acm", RUN+="/bin/sh -c 'chmod 0666 /sys/module/%k/parameters/disable_dtr_rts 2>/dev/null || true'"
+ACTION=="add", SUBSYSTEM=="tty", KERNEL=="ttyUSB*|ttyACM*", RUN+="/bin/sh -c 'chmod 0666 /sys/module/*/parameters/disable_dtr_rts 2>/dev/null || true'"
+EOF
+    udevadm control --reload-rules 2>/dev/null || true
 
     # Rebind devices
     rebind_devices "$MODULE"
@@ -641,6 +651,12 @@ cmd_restore()
     rm -f "$backup_file" "$BACKUP_DIR/${MODULE}.kver" "$BACKUP_DIR/${MODULE}.path" 2>/dev/null || true
     rmdir "$BACKUP_DIR" 2>/dev/null || true
 
+    # Clean up udev rule if no other patched drivers exist
+    if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
+        rm -f /etc/udev/rules.d/99-kernel-uart-patcher.rules 2>/dev/null || true
+        udevadm control --reload-rules 2>/dev/null || true
+    fi
+
     # Rebind devices
     rebind_devices "$MODULE"
 
@@ -666,10 +682,12 @@ cmd_toggle()
     case "$val" in
         1|on|true|yes|enable)
             echo "Y" > "$param_path"
+            chmod 0666 "$param_path" 2>/dev/null || true
             info "DTR/RTS control is now DISABLED (pins forced HIGH, Gimbal will NOT reset)"
             ;;
         0|off|false|no|disable)
             echo "N" > "$param_path"
+            chmod 0666 "$param_path" 2>/dev/null || true
             info "DTR/RTS control is now ENABLED (default Linux kernel behavior restored)"
             ;;
         *)

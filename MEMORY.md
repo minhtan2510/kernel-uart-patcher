@@ -105,6 +105,16 @@
   - Added modern minimalist 6px rounded scrollbar styling (`QScrollBar:vertical`) to eliminate bulky default Fusion scrollbars.
 * **Consequences:** Instant visibility into kernel module status, unbind operations, and compiler output without manual expansion; clean, stable window layout without geometric shifting.
 
+### [2026-11-06] ADR-11: Frictionless Direct Sysfs Toggling & Self-Healing Parameter Permissions
+* **Context:** When the user clicked the toggle switch to turn off reset protection, `gui.py` spawned `pkexec uart_kernel_patch.sh toggle <mod> 0`. This popped up a root authentication dialog. Dismissing or canceling the prompt aborted the toggle with `rc=126 (Request dismissed)`. The GUI then re-read the unchanged sysfs parameter and reverted the switch back to ON, causing an apparent "switch bounces back ON when turned OFF" bug.
+* **Decision:**
+  1. **Direct Sysfs Write in GUI (`src/gui/gui.py`):** Attempt direct Python file write to `/sys/module/<driver>/parameters/disable_dtr_rts` first. If permissions allow, state transitions occur in <1ms without sub-processes or password prompts.
+  2. **Self-Healing Permissions (`src/core/uart_kernel_patch.sh`):**
+     - During `install_module()`, immediately `chmod 0666` the parameter file and install `/etc/udev/rules.d/99-kernel-uart-patcher.rules` so permissions persist across reboots and USB reconnects.
+     - In `cmd_toggle()`, apply `chmod 0666` whenever executed via pkexec fallback.
+     - In `cmd_restore()`, clean up the udev rule when no patched drivers remain.
+* **Consequences:** Zero password prompts when clicking the toggle switch, instant tactile feedback, and elimination of toggle bounce-backs.
+
 ---
 
 ## 3. Known Gotchas & Constraints

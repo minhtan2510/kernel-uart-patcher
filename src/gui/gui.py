@@ -874,6 +874,8 @@ class UARTShieldApp(QWidget):
         """
         self.set_operating(False, msg)
         self.refresh_devices()
+        if not success:
+            self.log("[WARN] Operation cancelled or failed; switch reverted to match kernel state.")
 
     # --------------------------------------------------------------------------
     # Action Handlers
@@ -889,10 +891,27 @@ class UARTShieldApp(QWidget):
 
         if not os.path.isfile(param_file):
             self.patch_driver()
-        else:
-            val = 1 if new_state else 0
-            label = "Shield Active" if val == 1 else "Shield Inactive"
-            self._run_core_command(["toggle", driver, str(val)], f"Set {label}")
+            return
+
+        label = "Shield Active" if new_state else "Shield Inactive"
+        val_str = "Y" if new_state else "N"
+
+        # 1. Attempt direct sysfs write (instant, 0-friction, no root password dialog)
+        try:
+            with open(param_file, "w") as f:
+                f.write(val_str)
+            self.log(f"[SUCCESS] {label} set via sysfs (instant).")
+            self._update_selected_info()
+            self._flash_footer(f"✓ {label}")
+            return
+        except PermissionError:
+            self.log(f"[INFO] Direct sysfs write restricted, elevating via pkexec...")
+        except Exception as e:
+            self.log(f"[WARN] Direct sysfs write failed ({e}), attempting pkexec fallback...")
+
+        # 2. Fallback to pkexec if permissions not yet 0666
+        val_arg = "1" if new_state else "0"
+        self._run_core_command(["toggle", driver, val_arg], f"Set {label}")
 
     def patch_driver(self):
         """
