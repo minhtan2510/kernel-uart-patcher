@@ -329,9 +329,9 @@ class UARTShieldApp(QWidget):
                 background-color: #ffffff;
                 color: #0f172a;
                 border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                padding: 4px 10px;
-                font-size: 11px;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 12px;
                 font-weight: bold;
             }
             QPushButton#btn_scan:hover {
@@ -449,34 +449,22 @@ class UARTShieldApp(QWidget):
         root_layout.setContentsMargins(14, 14, 14, 12)
         root_layout.setSpacing(8)
 
-        # 1. Header Row (Title + Badge + Scan Button)
-        hdr = QHBoxLayout()
-        hdr.setSpacing(8)
+        # 1. Port Selector Dropdown & Scan Button (Single Row)
+        port_row = QHBoxLayout()
+        port_row.setSpacing(8)
 
-        lbl_title = QLabel("Kernel UART Patcher")
-        lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #0f172a;")
-        hdr.addWidget(lbl_title)
-
-        lbl_badge = QLabel("DTR/RTS")
-        lbl_badge.setStyleSheet(
-            "background: #e2e8f0; color: #475569; font-size: 10px; font-weight: bold; "
-            "border-radius: 4px; padding: 2px 6px; font-family: monospace;"
-        )
-        hdr.addWidget(lbl_badge)
-        hdr.addStretch()
+        self.combo_ports = PortComboBox()
+        self.combo_ports.currentIndexChanged.connect(self._on_device_selected)
+        self.combo_ports.doubleClicked.connect(self._copy_port_to_clipboard)
+        port_row.addWidget(self.combo_ports, stretch=1)
 
         self.btn_scan = QPushButton("↻ Scan")
         self.btn_scan.setObjectName("btn_scan")
         self.btn_scan.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_scan.clicked.connect(self.refresh_devices)
-        hdr.addWidget(self.btn_scan)
-        root_layout.addLayout(hdr)
+        port_row.addWidget(self.btn_scan)
 
-        # 2. Port Selector Dropdown
-        self.combo_ports = PortComboBox()
-        self.combo_ports.currentIndexChanged.connect(self._on_device_selected)
-        self.combo_ports.doubleClicked.connect(self._copy_port_to_clipboard)
-        root_layout.addWidget(self.combo_ports)
+        root_layout.addLayout(port_row)
 
         # 2b. Port In-Use Warning Chip (Hidden by default)
         self.port_warning = QFrame()
