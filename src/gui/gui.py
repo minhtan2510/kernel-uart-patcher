@@ -13,11 +13,12 @@ import subprocess
 import re
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox
+    QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
+    QStyledItemDelegate, QStyleOptionViewItem
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
-    QEasingCurve, pyqtProperty
+    QEasingCurve, pyqtProperty, QSize
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut, QPainterPath
@@ -166,12 +167,53 @@ class AnimatedToggle(QWidget):
 # ------------------------------------------------------------------------------
 # Clickable ComboBox with Double-Click Copy & Modern Vector Chevron
 # ------------------------------------------------------------------------------
+class PortItemDelegate(QStyledItemDelegate):
+    """
+    @brief Item delegate that renders smooth full-row background highlight
+           without default Qt focus borders or frames.
+    """
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        return QSize(size.width(), max(size.height(), 32))
+
+    def paint(self, painter, option, index):
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+
+        is_selected = bool(opt.state & QStyleOptionViewItem.StyleOptionState.State_Selected)
+        is_hover = bool(opt.state & QStyleOptionViewItem.StyleOptionState.State_MouseOver)
+
+        rect = opt.rect
+        row_rect = rect.adjusted(4, 2, -4, -2)
+
+        # Draw smooth background fill on hover/select without any border
+        if is_selected or is_hover:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#e2e8f0"))
+            painter.drawRoundedRect(row_rect, 6.0, 6.0)
+
+        # Draw item text cleanly
+        painter.setFont(opt.font)
+        painter.setPen(QColor("#0f172a"))
+        text_rect = rect.adjusted(12, 0, -12, 0)
+        painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), index.data())
+        painter.restore()
+
+
 class PortComboBox(QComboBox):
     """
-    @brief Custom ComboBox that copies active port path on double-click
-           and renders a crisp, modern anti-aliased vector chevron.
+    @brief Custom ComboBox that copies active port path on double-click,
+           renders a crisp, modern anti-aliased vector chevron, and ensures
+           clean full-row background hover without box outlines.
     """
     doubleClicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setItemDelegate(PortItemDelegate(self))
+        self.view().setMouseTracking(True)
 
     def mouseDoubleClickEvent(self, event):
         self.doubleClicked.emit()
@@ -319,25 +361,9 @@ class UARTShieldApp(QWidget):
                 background-color: #ffffff;
                 border: 1px solid #cbd5e1;
                 border-radius: 8px;
-                selection-background-color: #f1f5f9;
-                selection-color: #0f172a;
-                color: #0f172a;
                 padding: 4px;
                 outline: 0px;
-            }
-            QComboBox QAbstractItemView::item {
-                min-height: 28px;
-                padding: 4px 10px;
-                border: none;
-                border-radius: 6px;
-                color: #0f172a;
-            }
-            QComboBox QAbstractItemView::item:hover,
-            QComboBox QAbstractItemView::item:selected {
-                background-color: #f1f5f9;
-                color: #0f172a;
-                border: none;
-                outline: none;
+                selection-background-color: transparent;
             }
             QPushButton#btn_scan {
                 background-color: #ffffff;
