@@ -128,25 +128,27 @@
   - Dynamically branded install/patch buttons with target driver names (e.g. `Install Kernel Shield (cp210x)`).
 * **Consequences:** Physical UART bridges are selected first; all 5 major USB-UART/ACM drivers are fully protected; zero false-positive success logs.
 
-### [2026-11-06] ADR-14: Action Row Consolidation (70/30) & Direct Status Nomenclature
-* **Context:** The GUI previously displayed redundant actions (`Install Kernel Shield` inside the hero card + `Rebuild Patch` / `Restore` row below), causing geometric layout jumps when switching between patched and unpatched states. Furthermore, status badges used leading symbol icons (`●`, `○`, `△`) and terms (`Shield Active` / `Stock Driver`) that the user wanted replaced with more explicit, prominent status labels.
+### [2026-11-06] ADR-14: Action Row Consolidation (70/30) & Elimination of Redundant Rebuild
+* **Context:** The GUI previously displayed redundant actions (`Install Kernel Shield` inside the hero card + `Rebuild Patch` / `Restore` row below). Furthermore, once a driver was already patched and operating (`PATCHED ACTIVATED` / `PATCHED INACTIVE`), displaying a 70%-width `Rebuild Patch` button was confusing, redundant for daily use, and risked accidental recompilation/port disconnect.
 * **Decision:**
   1. **Consolidated Action Row (70/30 Split):**
      - Removed `btn_install` from the hero card, keeping only the bottom 2 action buttons.
-     - Configured a 70/30 horizontal layout (`stretch=7` for Button 1, `stretch=3` for Button 2).
-     - Button 1 dynamically adapts:
-       - Unpatched: Primary CTA `#2563eb` with text `Patch Driver (<driver>)`.
-       - Patched: Secondary white outline style with text `Rebuild Patch (<driver>)`.
-     - Button 2 (`Restore`): Disabled with tooltip when in `SYSTEM DEFAULT` state; enabled when patched with red hover highlight.
-  2. **Direct Status Badges:**
+     - Bottom row configured with `stretch=7` for Button 1 and `stretch=3` for Button 2.
+  2. **State-Driven Button Visibility:**
+     - **`SYSTEM DEFAULT` / `NO DEVICE`**:
+       - Button 1 (`btn_patch`): Visible, primary CTA `#2563eb` with text `Patch Driver (<driver>)`.
+       - Button 2 (`btn_restore`): Visible, disabled with tooltip: `"Cannot restore: driver is already the original factory driver."`.
+     - **`PATCHED ACTIVATED` / `PATCHED INACTIVE`**:
+       - Button 1 (`btn_patch`): **Hidden completely** to eliminate confusion and focus user attention on the Toggle Switch.
+       - Button 2 (`btn_restore`): Expands to full width with text `Restore Original Driver (<driver>)`, enabled with subtle border and red hover highlight.
+  3. **Developer Rebuild Access:**
+     - Right-click context menu on the Hero Card provides `Force Rebuild Driver (<driver>)`.
+     - Keyboard shortcut `Ctrl+Shift+R` triggers forced rebuild.
+  4. **Direct Status Badges:**
      - Removed all icons from the status badges.
-     - Standardized on exact terms:
-       - `PATCHED ACTIVATED` (Emerald green): Resets blocked, DTR held HIGH.
-       - `PATCHED INACTIVE` (Amber): Normal serial resets allowed.
-       - `SYSTEM DEFAULT` (Slate): Original unpatched OS driver.
-       - `NO DEVICE` (Muted gray): No serial adapter connected.
-     - Upgraded status badge typography and padding (`PILL_STYLE_BASE`: 12px bold, 5px 14px padding, 8px radius) for prominent readability.
-* **Consequences:** Layout height and geometry remain rock-solid across state transitions; plenty of horizontal room for descriptive button labels without text clipping; status is unmistakably clear at a glance.
+     - Standardized on exact terms: `PATCHED ACTIVATED`, `PATCHED INACTIVE`, `SYSTEM DEFAULT`, `NO DEVICE`.
+     - Upgraded typography and padding (`PILL_STYLE_BASE`: 12px bold, 5px 14px padding, 8px radius).
+* **Consequences:** Clean visual hierarchy; zero button redundancy; focus remains 100% on the toggle switch when protected; developer rebuild options remain readily accessible via shortcut and context menu.
 
 ---
 

@@ -14,7 +14,7 @@ import re
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
-    QStyledItemDelegate, QStyleOptionViewItem, QStyle
+    QStyledItemDelegate, QStyleOptionViewItem, QStyle, QMenu
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
@@ -403,11 +403,6 @@ class UARTShieldApp(QWidget):
                 background-color: #f1f5f9;
                 border: 1px solid #3b82f6;
             }
-            QPushButton#btn_patch:disabled, QPushButton#btn_restore:disabled {
-                background-color: #f1f5f9;
-                color: #94a3b8;
-                border: 1px solid #e2e8f0;
-            }
             QPushButton#btn_restore {
                 background-color: #ffffff;
                 color: #475569;
@@ -421,6 +416,11 @@ class UARTShieldApp(QWidget):
                 background-color: #fef2f2;
                 border: 1px solid #ef4444;
                 color: #dc2626;
+            }
+            QPushButton#btn_patch:disabled, QPushButton#btn_restore:disabled {
+                background-color: #f1f5f9;
+                color: #94a3b8;
+                border: 1px solid #e2e8f0;
             }
             QPlainTextEdit {
                 background-color: #f8fafc;
@@ -474,6 +474,7 @@ class UARTShieldApp(QWidget):
         QShortcut(QKeySequence(Qt.Key.Key_Space), self, self._on_space_pressed)
         QShortcut(QKeySequence("Ctrl+R"), self, self.refresh_devices)
         QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.refresh_devices)
+        QShortcut(QKeySequence("Ctrl+Shift+R"), self, lambda: self.patch_driver(force=True))
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.close)
 
     def _build_ui(self):
@@ -517,6 +518,8 @@ class UARTShieldApp(QWidget):
         # 3. Hero Status Card (Houses Status Pill + Switch + Desc)
         self.card = QFrame()
         self.card.setObjectName("card")
+        self.card.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.card.customContextMenuRequested.connect(self._show_card_context_menu)
         card_layout = QVBoxLayout(self.card)
         card_layout.setContentsMargins(12, 12, 12, 12)
         card_layout.setSpacing(6)
@@ -552,7 +555,7 @@ class UARTShieldApp(QWidget):
         self.btn_patch.clicked.connect(self.patch_driver)
         actions.addWidget(self.btn_patch, stretch=7)
 
-        self.btn_restore = QPushButton("Restore Stock")
+        self.btn_restore = QPushButton("Restore")
         self.btn_restore.setObjectName("btn_restore")
         self.btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_restore.clicked.connect(self.restore_driver)
@@ -628,7 +631,9 @@ class UARTShieldApp(QWidget):
         self.active_task_label = task_name
 
         self.btn_scan.setEnabled(not operating)
-        self.btn_patch.setEnabled(not operating and not self.is_port_locked)
+        self.btn_patch.setEnabled(
+            not operating and not self.is_port_locked and not self.current_param_exists
+        )
         self.btn_restore.setEnabled(
             not operating and not self.is_port_locked and self.current_param_exists
         )
@@ -813,18 +818,20 @@ class UARTShieldApp(QWidget):
                     self.switch.setChecked(False)
                     self.switch.setEnabled(True)
 
-                self._set_patch_btn_mode(True)
-                self.btn_patch.setText(f"Rebuild Patch ({driver})")
-                self.btn_restore.setToolTip("")
+                self.btn_patch.hide()
+                self.btn_restore.setText(f"Restore Original Driver ({driver})")
+                self.btn_restore.setToolTip(f"Restore factory kernel driver for '{driver}' (removes reset shield)")
+                self.btn_restore.show()
             except Exception:
                 self._set_stock_state(driver)
         else:
             self._set_stock_state(driver)
 
         if not self.is_port_locked and not self.is_operating:
-            self.btn_patch.setEnabled(True)
             if self.current_param_exists:
                 self.btn_restore.setEnabled(True)
+            else:
+                self.btn_patch.setEnabled(True)
 
     def _set_patch_btn_mode(self, is_secondary: bool):
         """
@@ -853,8 +860,12 @@ class UARTShieldApp(QWidget):
         self._set_patch_btn_mode(False)
         self.btn_patch.setText(f"Patch Driver ({driver})")
         self.btn_patch.setEnabled(not self.is_port_locked and not self.is_operating)
+        self.btn_patch.show()
+
+        self.btn_restore.setText("Restore")
         self.btn_restore.setEnabled(False)
         self.btn_restore.setToolTip("Cannot restore: driver is already the original factory driver.")
+        self.btn_restore.show()
 
     def _set_no_device_state(self):
         """
@@ -870,10 +881,16 @@ class UARTShieldApp(QWidget):
         self.lbl_desc.setText("Connect a USB-UART adapter or gimbal.")
         self.switch.setChecked(False, animated=False)
         self.switch.setEnabled(False)
+
         self._set_patch_btn_mode(True)
         self.btn_patch.setText("Patch Driver")
         self.btn_patch.setEnabled(False)
+        self.btn_patch.show()
+
+        self.btn_restore.setText("Restore")
         self.btn_restore.setEnabled(False)
+        self.btn_restore.setToolTip("")
+        self.btn_restore.show()
 
     def _get_current_driver(self) -> str:
         idx = self.combo_ports.currentIndex()
@@ -955,24 +972,49 @@ class UARTShieldApp(QWidget):
         val_arg = "1" if new_state else "0"
         self._run_core_command(["toggle", driver, val_arg], f"Set {label}")
 
-    def patch_driver(self):
+    def patch_driver(self, force: bool = False):
         """
-        @brief Trigger driver patch installation.
+        @brief Trigger driver patch installation or forced rebuild.
+        @param force True if manually forced rebuild.
         """
         driver = self._get_current_driver()
         port = self._get_current_port()
+        title = "Force Rebuild Patch" if force else "Install Patch"
+        msg = (
+            f"Rebuild and reinstall DTR/RTS reset shield for '{driver}' ({port})?\n\n"
+            "This will recompile and reinstall the kernel driver module."
+            if force
+            else f"Build and install DTR/RTS reset shield for '{driver}' ({port})?\n\n"
+            "This will download, patch, and install the kernel driver module."
+        )
         confirm = QMessageBox.question(
             self,
-            "Install Patch",
-            f"Build and install DTR/RTS reset shield for '{driver}' ({port})?\n\n"
-            "This will download, patch, and install the kernel driver module.",
+            title,
+            msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
 
-        self._run_core_command(["patch", driver, "-y"], f"Patching {driver}")
+        task_label = f"Rebuilding {driver}" if force else f"Patching {driver}"
+        self._run_core_command(["patch", driver, "-y"], task_label)
+
+    def _show_card_context_menu(self, pos):
+        """
+        @brief Developer context menu on hero card for advanced actions.
+        @param pos Position where context menu was requested.
+        """
+        driver = self._get_current_driver()
+        if not driver or self.is_operating or not self.current_param_exists:
+            return
+
+        menu = QMenu(self)
+        action_rebuild = menu.addAction(f"Force Rebuild Driver ({driver})")
+        action_rebuild.setEnabled(not self.is_port_locked and not self.is_operating)
+        chosen = menu.exec(self.card.mapToGlobal(pos))
+        if chosen == action_rebuild:
+            self.patch_driver(force=True)
 
     def restore_driver(self):
         """
