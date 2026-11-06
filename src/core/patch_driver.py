@@ -172,6 +172,104 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
 
     return content
 
+def patch_cdc_acm(content: str) -> str:
+    # 1. Add module parameter
+    mod_param = """
+/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
+static bool disable_dtr_rts = true;
+module_param(disable_dtr_rts, bool, 0644);
+MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
+"""
+    target = '#include <linux/module.h>'
+    if target not in content:
+        raise ValueError("Target include not found in cdc-acm.c")
+    content = content.replace(target, target + "\n" + mod_param, 1)
+
+    # 2. Patch acm_port_dtr_rts
+    dtr_target = "if (active)\n\t\tval = USB_CDC_CTRL_DTR | USB_CDC_CTRL_RTS;\n\telse\n\t\tval = 0;"
+    dtr_repl = """if (disable_dtr_rts) {
+\t\tval = 0;
+\t} else if (active) {
+\t\tval = USB_CDC_CTRL_DTR | USB_CDC_CTRL_RTS;
+\t} else {
+\t\tval = 0;
+\t}"""
+    if dtr_target in content:
+        content = content.replace(dtr_target, dtr_repl, 1)
+    else:
+        dtr_pattern = re.compile(
+            r'if\s*\(active\)\s*val\s*=\s*USB_CDC_CTRL_DTR\s*\|\s*USB_CDC_CTRL_RTS;\s*else\s*val\s*=\s*0;',
+            re.MULTILINE
+        )
+        content, n = dtr_pattern.subn(dtr_repl, content, count=1)
+        if n == 0:
+            raise ValueError("Failed to patch acm_port_dtr_rts in cdc-acm.c")
+
+    # 3. Patch acm_tty_tiocmset
+    tiocmset_pattern = re.compile(
+        r'(static int acm_tty_tiocmset\(struct tty_struct \*tty,\s*unsigned int set, unsigned int clear\)\s*\{)',
+        re.MULTILINE
+    )
+    tiocmset_repl = r"""\1
+	if (disable_dtr_rts) {
+		set &= ~(TIOCM_DTR | TIOCM_RTS);
+		clear |= (TIOCM_DTR | TIOCM_RTS);
+	}"""
+    content, n = tiocmset_pattern.subn(tiocmset_repl, content, count=1)
+    if n == 0:
+        raise ValueError("Failed to patch acm_tty_tiocmset in cdc-acm.c")
+
+    return content
+
+def patch_pl2303(content: str) -> str:
+    # 1. Add module parameter
+    mod_param = """
+/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
+static bool disable_dtr_rts = true;
+module_param(disable_dtr_rts, bool, 0644);
+MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
+"""
+    target = '#include <linux/usb/serial.h>'
+    if target not in content:
+        raise ValueError("Target include not found in pl2303.c")
+    content = content.replace(target, target + "\n" + mod_param, 1)
+
+    # 2. Patch pl2303_dtr_rts
+    dtr_target = "if (on)\n\t\tpriv->line_control |= (CONTROL_DTR | CONTROL_RTS);\n\telse\n\t\tpriv->line_control &= ~(CONTROL_DTR | CONTROL_RTS);"
+    dtr_repl = """if (disable_dtr_rts) {
+\t\tpriv->line_control &= ~(CONTROL_DTR | CONTROL_RTS);
+\t} else if (on) {
+\t\tpriv->line_control |= (CONTROL_DTR | CONTROL_RTS);
+\t} else {
+\t\tpriv->line_control &= ~(CONTROL_DTR | CONTROL_RTS);
+\t}"""
+    if dtr_target in content:
+        content = content.replace(dtr_target, dtr_repl, 1)
+    else:
+        dtr_pattern = re.compile(
+            r'if\s*\(on\)\s*priv->line_control\s*\|=\s*\(CONTROL_DTR\s*\|\s*CONTROL_RTS\);\s*else\s*priv->line_control\s*&=.*?;',
+            re.MULTILINE
+        )
+        content, n = dtr_pattern.subn(dtr_repl, content, count=1)
+        if n == 0:
+            raise ValueError("Failed to patch pl2303_dtr_rts in pl2303.c")
+
+    # 3. Patch pl2303_tiocmset
+    tiocmset_pattern = re.compile(
+        r'(static int pl2303_tiocmset\(struct tty_struct \*tty,\s*unsigned int set, unsigned int clear\)\s*\{)',
+        re.MULTILINE
+    )
+    tiocmset_repl = r"""\1
+	if (disable_dtr_rts) {
+		set &= ~(TIOCM_DTR | TIOCM_RTS);
+		clear |= (TIOCM_DTR | TIOCM_RTS);
+	}"""
+    content, n = tiocmset_pattern.subn(tiocmset_repl, content, count=1)
+    if n == 0:
+        raise ValueError("Failed to patch pl2303_tiocmset in pl2303.c")
+
+    return content
+
 def main():
     if len(sys.argv) < 3:
         print(f"Usage: {sys.argv[0]} <module_name> <source_file>")
@@ -189,6 +287,10 @@ def main():
         patched = patch_ch341(content)
     elif mod_name in ("ftdi_sio", "ftdi"):
         patched = patch_ftdi(content)
+    elif mod_name in ("cdc_acm", "cdc-acm"):
+        patched = patch_cdc_acm(content)
+    elif mod_name == "pl2303":
+        patched = patch_pl2303(content)
     else:
         # Fallback for others: comment out .dtr_rts
         dtr_pattern = re.compile(r'^\s*\.dtr_rts\s*=.*', re.MULTILINE)

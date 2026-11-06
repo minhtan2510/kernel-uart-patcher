@@ -656,16 +656,33 @@ class UARTShieldApp(QWidget):
                 for f in os.listdir("/dev")
                 if f.startswith("ttyUSB") or f.startswith("ttyACM")
             ]
-            ports.sort()
+            # Prioritize physical USB-UART bridges (ttyUSB) before ACM/modem gadgets (ttyACM)
+            ports.sort(key=lambda p: (0 if "ttyUSB" in p else 1, p))
 
             for port in ports:
                 port_name = os.path.basename(port)
                 driver = "unknown"
+                desc = ""
                 mod_link = f"/sys/class/tty/{port_name}/device/driver/module"
                 if os.path.islink(mod_link):
                     driver = os.path.basename(os.path.realpath(mod_link))
 
-                self.devices.append({"port": port, "driver": driver})
+                try:
+                    out = subprocess.check_output(
+                        ["udevadm", "info", "-q", "property", "-n", port],
+                        stderr=subprocess.DEVNULL,
+                        text=True
+                    )
+                    for line in out.splitlines():
+                        if line.startswith("ID_MODEL_FROM_DATABASE="):
+                            desc = line.split("=", 1)[1].strip()
+                            break
+                        elif line.startswith("ID_MODEL=") and not desc:
+                            desc = line.split("=", 1)[1].strip().replace("_", " ")
+                except Exception:
+                    pass
+
+                self.devices.append({"port": port, "driver": driver, "desc": desc})
         except Exception as e:
             self.log(f"Error scanning ports: {e}")
 
@@ -674,7 +691,10 @@ class UARTShieldApp(QWidget):
         self.combo_ports.blockSignals(True)
         self.combo_ports.clear()
 
-        values = [f"{d['port']} ({d['driver']})" for d in self.devices]
+        values = [
+            f"{d['port']} ({d['driver']}) — {d['desc']}" if d.get("desc") else f"{d['port']} ({d['driver']})"
+            for d in self.devices
+        ]
         self.combo_ports.addItems(values)
 
         if values:
@@ -810,9 +830,10 @@ class UARTShieldApp(QWidget):
         self.switch.setChecked(False, animated=False)
         self.switch.setEnabled(False)
 
+        self.btn_install.setText(f"Install Kernel Shield ({driver})")
         self.btn_install.show()
         self.btn_install.setEnabled(not self.is_port_locked and not self.is_operating)
-        self.btn_patch.setText("Patch Driver")
+        self.btn_patch.setText(f"Patch Driver ({driver})")
 
     def _set_no_device_state(self):
         """
@@ -918,10 +939,11 @@ class UARTShieldApp(QWidget):
         @brief Trigger driver patch installation.
         """
         driver = self._get_current_driver()
+        port = self._get_current_port()
         confirm = QMessageBox.question(
             self,
             "Install Patch",
-            f"Build and install DTR/RTS reset shield for '{driver}'?\n\n"
+            f"Build and install DTR/RTS reset shield for '{driver}' ({port})?\n\n"
             "This will download, patch, and install the kernel driver module.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
@@ -936,10 +958,11 @@ class UARTShieldApp(QWidget):
         @brief Trigger driver restore to stock Ubuntu version.
         """
         driver = self._get_current_driver()
+        port = self._get_current_port()
         confirm = QMessageBox.question(
             self,
             "Restore Stock Driver",
-            f"Restore original factory driver for '{driver}'?\n\n"
+            f"Restore original factory driver for '{driver}' ({port})?\n\n"
             "Warning: This will remove reset protection and restore standard Ubuntu DTR/RTS behavior.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No

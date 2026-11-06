@@ -537,8 +537,9 @@ install_module()
         info "CONFIRMED: Deep Patch is ACTIVE in running kernel memory!"
         chmod 0666 "/sys/module/${MODULE}/parameters/disable_dtr_rts" 2>/dev/null || true
     else
-        warn "Module loaded but /sys/module/${MODULE}/parameters/disable_dtr_rts not found."
-        warn "You may need to unplug the USB cable and run: sudo rmmod ${MODULE} && sudo modprobe ${MODULE}"
+        err "Verification failed: /sys/module/${MODULE}/parameters/disable_dtr_rts was not found."
+        err "The patched module could not be activated in kernel memory."
+        die "Deep Patch verification failed in running kernel memory!"
     fi
 
     # Install persistent udev rule so parameter stays writable without root password
