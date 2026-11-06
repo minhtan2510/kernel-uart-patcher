@@ -247,7 +247,10 @@
     - Open Control Panel: Restores, activates, and raises the main window.
     - Quit: Clean process exit.
   - Left-click or double-click on tray icon restores and brings window to focus.
-  - Real-time synchronization: `_update_tray()` is invoked on device refresh, selection change, toggle, and busy operating state.
+  - Real-time synchronization & Glitch Prevention:
+    - Pre-caches static `QIcon` objects for all 4 states (`active`, `inactive`, `default`, `none`) to eliminate runtime re-allocation and DBus pixmap deserialization race conditions.
+    - Resolves physical hardware devices via `refresh_devices()` prior to `_setup_tray()`, initializing the tray directly with the accurate state (preventing the GNOME AppIndicator fallback warning/exclamation icon glitch).
+    - Signature-based diffing in `refresh_devices()`: prevents clearing combobox and zeroing `self.devices` on routine 3000ms timer ticks unless hardware is physically plugged or removed, eliminating spurious state transitions.
 * **Consequences:** Enables zero-friction, instantaneous single-click toggle of MCU reset shield from top panel without window clutter, transforming the application into a persistent, unobtrusive status bar companion.
 
 ---

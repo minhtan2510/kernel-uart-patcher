@@ -322,11 +322,11 @@ class UARTShieldApp(QWidget):
         self._tray_notified = False
         self._tray_last_state = ""
         self.tray = None
+        self._tray_icons = {}
 
         self._setup_window()
         self._build_ui()
         self._setup_shortcuts()
-        self._setup_tray()
 
         # Timers
         self.spinner_timer = QTimer(self)
@@ -336,7 +336,9 @@ class UARTShieldApp(QWidget):
         self.refresh_timer.timeout.connect(self.refresh_devices)
         self.refresh_timer.start(3000)
 
+        # Initial device scan first, then initialize tray with accurate state
         self.refresh_devices()
+        self._setup_tray()
 
     def _setup_window(self):
         """
@@ -785,12 +787,12 @@ class UARTShieldApp(QWidget):
 
     def refresh_devices(self):
         """
-        @brief Scan available serial ports and query driver parameters.
+        @brief Scan available serial ports and query driver parameters with change detection.
         """
         if self.is_operating:
             return
 
-        self.devices = []
+        scanned = []
         try:
             ports = [
                 f"/dev/{f}"
@@ -823,31 +825,40 @@ class UARTShieldApp(QWidget):
                 except Exception:
                     pass
 
-                self.devices.append({"port": port, "driver": driver, "desc": desc})
+                scanned.append({"port": port, "driver": driver, "desc": desc})
         except Exception as e:
             self.log(f"Error scanning ports: {e}")
 
-        # Populate combobox
-        current_selection = self.combo_ports.currentText()
-        self.combo_ports.blockSignals(True)
-        self.combo_ports.clear()
+        # Only rebuild dropdown if physical ports or drivers actually changed
+        curr_sig = [(d["port"], d["driver"], d.get("desc", "")) for d in self.devices]
+        new_sig = [(d["port"], d["driver"], d.get("desc", "")) for d in scanned]
 
-        values = [
-            f"{d['port']} ({d['driver']}) — {d['desc']}" if d.get("desc") else f"{d['port']} ({d['driver']})"
-            for d in self.devices
-        ]
-        self.combo_ports.addItems(values)
+        if curr_sig != new_sig:
+            self.devices = scanned
+            current_selection = self.combo_ports.currentText()
+            self.combo_ports.blockSignals(True)
+            self.combo_ports.clear()
 
-        if values:
-            if current_selection in values:
-                self.combo_ports.setCurrentText(current_selection)
+            values = [
+                f"{d['port']} ({d['driver']}) — {d['desc']}" if d.get("desc") else f"{d['port']} ({d['driver']})"
+                for d in self.devices
+            ]
+            self.combo_ports.addItems(values)
+
+            if values:
+                if current_selection in values:
+                    self.combo_ports.setCurrentText(current_selection)
+                else:
+                    self.combo_ports.setCurrentIndex(0)
+                self.combo_ports.blockSignals(False)
             else:
-                self.combo_ports.setCurrentIndex(0)
-            self.combo_ports.blockSignals(False)
+                self.combo_ports.addItem("No serial ports detected")
+                self.combo_ports.blockSignals(False)
+
+        # Update driver parameters and tray status without clearing widget state
+        if self.devices:
             self._update_selected_info()
         else:
-            self.combo_ports.addItem("No serial ports detected")
-            self.combo_ports.blockSignals(False)
             self._set_no_device_state()
 
     def _check_port_lock(self, port_path: str):
@@ -1168,9 +1179,15 @@ class UARTShieldApp(QWidget):
             self.tray = None
             return
 
+        # Pre-cache static icons to avoid dynamic re-allocation during runtime
+        self._tray_icons = {
+            "active": self._make_tray_icon("active"),
+            "inactive": self._make_tray_icon("inactive"),
+            "default": self._make_tray_icon("default"),
+            "none": self._make_tray_icon("none"),
+        }
+
         self.tray = QSystemTrayIcon(self)
-        self.tray.setIcon(self._make_tray_icon("none"))
-        self.tray.setToolTip("Kernel UART Patcher")
 
         # Context Menu
         self.tray_menu = QMenu()
@@ -1199,6 +1216,10 @@ class UARTShieldApp(QWidget):
 
         self.tray.setContextMenu(self.tray_menu)
         self.tray.activated.connect(self._on_tray_activated)
+
+        # Initialize directly with accurate post-scan state (prevents warning icon glitch)
+        self._tray_last_state = ""
+        self._update_tray()
         self.tray.show()
 
     def _update_tray(self):
@@ -1237,7 +1258,11 @@ class UARTShieldApp(QWidget):
             toggle_enabled = True
 
         if state != self._tray_last_state:
-            self.tray.setIcon(self._make_tray_icon(state))
+            cached_icon = self._tray_icons.get(state)
+            if cached_icon is None:
+                cached_icon = self._make_tray_icon(state)
+                self._tray_icons[state] = cached_icon
+            self.tray.setIcon(cached_icon)
             self._tray_last_state = state
 
         self.tray.setToolTip(tooltip)
