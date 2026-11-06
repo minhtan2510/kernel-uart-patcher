@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
-    QEasingCurve, pyqtProperty, QSize, QPointF
+    QEasingCurve, pyqtProperty, QSize, QPointF, QRectF
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut,
@@ -1069,11 +1069,10 @@ class UARTShieldApp(QWidget):
 
     def _make_tray_icon(self, state: str) -> QIcon:
         """
-        @brief Render a modern, high-contrast HiDPI vector shield tray icon.
+        @brief Render a sleek HiDPI USB-UART adapter icon with real-time status pip.
         @param state State string: 'active', 'inactive', 'default', or 'none'.
-        @return QIcon instance with rendered vector shield emblem.
+        @return QIcon instance with rendered hardware USB adapter and badge.
         """
-        # Render at 2x physical resolution with 2.0 devicePixelRatio for crisp HiDPI display
         scale = 2.0
         logical_size = 22
         pixmap = QPixmap(int(logical_size * scale), int(logical_size * scale))
@@ -1083,59 +1082,80 @@ class UARTShieldApp(QWidget):
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # 1. Vector Shield Geometry (smooth ergonomic silhouette)
-        shield_path = QPainterPath()
-        shield_path.moveTo(11.0, 1.8)
-        shield_path.lineTo(17.8, 3.4)
-        shield_path.cubicTo(18.2, 3.5, 18.5, 4.0, 18.5, 4.6)
-        shield_path.lineTo(18.5, 10.5)
-        shield_path.cubicTo(18.5, 15.2, 15.5, 18.4, 11.0, 20.5)
-        shield_path.cubicTo(6.5, 18.4, 3.5, 15.2, 3.5, 10.5)
-        shield_path.lineTo(3.5, 4.6)
-        shield_path.cubicTo(3.5, 4.0, 3.8, 3.5, 4.2, 3.4)
-        shield_path.closeSubpath()
+        # 1. USB Type-A Metal Connector (Top)
+        painter.setPen(QPen(QColor("#94a3b8"), 1.2))
+        painter.setBrush(QBrush(QColor("#e2e8f0")))
+        painter.drawRoundedRect(QRectF(6.0, 1.8, 10.0, 5.8), 1.2, 1.2)
 
-        # 2. Render emblem based on driver shield state
-        if state == "active":
-            # Vivid Emerald shield with white checkmark (Resets Shielded)
-            painter.setPen(QPen(QColor("#047857"), 1.2))
-            painter.setBrush(QBrush(QColor("#10b981")))
-            painter.drawPath(shield_path)
+        # Two precision contact pin cutouts in metal connector
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor("#64748b")))
+        painter.drawRect(QRectF(7.6, 3.4, 2.0, 2.2))
+        painter.drawRect(QRectF(12.4, 3.4, 2.0, 2.2))
 
-            checkmark = QPainterPath()
-            checkmark.moveTo(7.5, 9.8)
-            checkmark.lineTo(10.0, 12.5)
-            checkmark.lineTo(14.5, 7.5)
-            painter.setPen(QPen(QColor("#ffffff"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawPath(checkmark)
+        # 2. USB Dongle Body (Main Chassis)
+        body_path = QPainterPath()
+        body_path.addRoundedRect(QRectF(4.0, 7.2, 14.0, 12.8), 2.5, 2.5)
 
-        elif state == "inactive":
-            # Warm Amber shield with white bypass bar (Pass-Through / Flash mode)
-            painter.setPen(QPen(QColor("#b45309"), 1.2))
-            painter.setBrush(QBrush(QColor("#f59e0b")))
-            painter.drawPath(shield_path)
-
-            painter.setPen(QPen(QColor("#ffffff"), 2.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-            painter.drawLine(QPointF(7.5, 10.5), QPointF(14.5, 10.5))
-
-        elif state == "default":
-            # Slate shield with warning exclamation mark (Unpatched stock driver)
-            painter.setPen(QPen(QColor("#475569"), 1.2))
-            painter.setBrush(QBrush(QColor("#94a3b8")))
-            painter.drawPath(shield_path)
-
-            painter.setPen(QPen(QColor("#ffffff"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-            painter.drawLine(QPointF(11.0, 6.5), QPointF(11.0, 10.5))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor("#ffffff")))
-            painter.drawEllipse(QPointF(11.0, 13.0), 1.1, 1.1)
-
-        else:
-            # Subtle dashed outline shield for disconnected state
+        if state == "none":
+            # Disconnected: subtle outline with translucent fill
             painter.setPen(QPen(QColor("#94a3b8"), 1.2, Qt.PenStyle.DashLine))
-            painter.setBrush(QBrush(QColor(241, 245, 249, 160)))
-            painter.drawPath(shield_path)
+            painter.setBrush(QBrush(QColor(241, 245, 249, 120)))
+            painter.drawPath(body_path)
+        else:
+            # Connected: Dark modern obsidian body with crisp metallic border
+            painter.setPen(QPen(QColor("#475569"), 1.2))
+            painter.setBrush(QBrush(QColor("#1e293b")))
+            painter.drawPath(body_path)
+
+            # Circuit / Grip ridges on chassis
+            painter.setPen(QPen(QColor("#64748b"), 1.0))
+            painter.drawLine(QPointF(6.5, 10.5), QPointF(10.0, 10.5))
+            painter.drawLine(QPointF(6.5, 12.5), QPointF(10.0, 12.5))
+            painter.drawLine(QPointF(6.5, 14.5), QPointF(9.0, 14.5))
+
+            # 3. Status Badge Pip (Bottom-Right Corner)
+            pip_center = QPointF(15.5, 15.5)
+            pip_radius = 4.0
+
+            # Protective dark cutout barrier separating badge from body
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(QColor("#0f172a")))
+            painter.drawEllipse(pip_center, pip_radius + 1.2, pip_radius + 1.2)
+
+            if state == "active":
+                pip_fill = QColor("#10b981")    # Emerald 500
+                pip_border = QColor("#047857")  # Emerald 700
+            elif state == "inactive":
+                pip_fill = QColor("#f59e0b")    # Amber 500
+                pip_border = QColor("#b45309")  # Amber 700
+            else:
+                pip_fill = QColor("#94a3b8")    # Slate 400
+                pip_border = QColor("#475569")  # Slate 600
+
+            painter.setPen(QPen(pip_border, 1.0))
+            painter.setBrush(QBrush(pip_fill))
+            painter.drawEllipse(pip_center, pip_radius, pip_radius)
+
+            # High-contrast center glyph inside status pip
+            if state == "active":
+                # Checkmark (Shield Active)
+                checkmark = QPainterPath()
+                checkmark.moveTo(13.6, 15.4)
+                checkmark.lineTo(14.9, 16.8)
+                checkmark.lineTo(17.4, 14.2)
+                painter.setPen(QPen(QColor("#ffffff"), 1.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(checkmark)
+            elif state == "inactive":
+                # Minus / Bypass line (Pass-through mode)
+                painter.setPen(QPen(QColor("#ffffff"), 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawLine(QPointF(13.6, 15.5), QPointF(17.4, 15.5))
+            else:
+                # Center indicator dot
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(QColor("#ffffff")))
+                painter.drawEllipse(pip_center, 1.2, 1.2)
 
         painter.end()
         return QIcon(pixmap)
