@@ -157,14 +157,14 @@
      - Retained pure white `#ffffff` background with `#cbd5e1` border and rounded 8px corners to preserve 100% theme consistency with the hero card and controls.
      - Monospaced typography with crisp rendering and comfortable padding (`8px 10px`).
      - Minimalist light vertical scrollbar styling.
-  2. **Semantic Color & Outcome Highlighting on Light Background:**
-     - **Action Header (`[ACTION]`):** Highlighted in bold blue (`#1d4ed8`) with prefix `▶`.
-     - **Success Banner (`[DONE]` / `[SUCCESS]`):** Prominent emerald chip with light green fill (`#ecfdf5`), soft border (`#a7f3d0`), and deep green text (`#15803d`) with prefix `✓`.
-     - **Failure Banner (`[FAIL]` / `[ERROR]`):** Prominent crimson chip with light red fill (`#fef2f2`), soft border (`#fecaca`), and deep red text (`#b91c1c`) with prefix `✗`.
+  2. **Semantic Color Highlighting on Pure White Background (No Text Background Chips):**
+     - **Action Header (`[ACTION]`):** Bold blue (`#1d4ed8`) with prefix `▶`.
+     - **Success Outcome (`[DONE]` / `[SUCCESS]`):** Bold forest green (`#15803d`) with prefix `✓` (no background highlight).
+     - **Failure Outcome (`[FAIL]` / `[ERROR]`):** Bold crimson red (`#dc2626`) with prefix `✗` (no background highlight).
      - **Milestone Steps (`[OK]`):** Forest green (`#16a34a`) with checkmark `✓`.
      - **Step Errors (`[ERR]`):** Crimson red (`#dc2626`) with crossmark `✗`.
      - **Warnings (`[WARN]`, `[!!]`):** Amber (`#b45309`) with warning sign `⚠`.
-     - **Cancel Notice (`[CANCEL]`):** Neutral light gray chip (`#f1f5f9`, `#64748b`) with prefix `⊘`.
+     - **Cancel Notice (`[CANCEL]`):** Neutral muted slate (`#64748b`) with prefix `⊘`.
      - **Background/Compiler Output:** Soft muted slate (`#64748b` for indented lines, `#334155` for standard text).
   3. **Auto-Scrolling:**
      - Dynamically scrolls `QPlainTextEdit` to the maximum vertical scroll value upon each new line appended.
