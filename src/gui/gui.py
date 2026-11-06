@@ -56,6 +56,10 @@ COLOR_RED_TEXT = "#b91c1c"        # Red 700 (Danger text)
 COLOR_BLUE_BTN = "#2563eb"        # Blue 600 (Primary action)
 COLOR_BLUE_HOVER = "#1d4ed8"      # Blue 700
 
+PILL_STYLE_BASE = (
+    "border-radius: 8px; padding: 5px 14px; font-size: 12px; font-weight: bold; letter-spacing: 0.4px;"
+)
+
 
 # ------------------------------------------------------------------------------
 # Custom Animated Toggle Switch (PyQt6 Hardware-Accelerated Canvas)
@@ -379,15 +383,23 @@ class UARTShieldApp(QWidget):
                 border: 1px solid #3b82f6;
             }
             QPushButton#btn_patch {
-                background-color: #ffffff;
-                color: #0f172a;
-                border: 1px solid #cbd5e1;
+                background-color: #2563eb;
+                color: #ffffff;
+                border: none;
                 border-radius: 7px;
-                padding: 8px;
+                padding: 8px 12px;
                 font-size: 12px;
                 font-weight: bold;
             }
             QPushButton#btn_patch:hover {
+                background-color: #1d4ed8;
+            }
+            QPushButton#btn_patch[secondary="true"] {
+                background-color: #ffffff;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+            }
+            QPushButton#btn_patch[secondary="true"]:hover {
                 background-color: #f1f5f9;
                 border: 1px solid #3b82f6;
             }
@@ -401,7 +413,7 @@ class UARTShieldApp(QWidget):
                 color: #475569;
                 border: 1px solid #cbd5e1;
                 border-radius: 7px;
-                padding: 8px;
+                padding: 8px 10px;
                 font-size: 12px;
                 font-weight: bold;
             }
@@ -409,23 +421,6 @@ class UARTShieldApp(QWidget):
                 background-color: #fef2f2;
                 border: 1px solid #ef4444;
                 color: #dc2626;
-            }
-            QPushButton#btn_install {
-                background-color: #2563eb;
-                color: #ffffff;
-                border: none;
-                border-radius: 7px;
-                padding: 8px;
-                font-size: 12px;
-                font-weight: bold;
-            }
-            QPushButton#btn_install:hover {
-                background-color: #1d4ed8;
-            }
-            QPushButton#btn_install:disabled {
-                background-color: #e2e8f0;
-                color: #94a3b8;
-                border: 1px solid #cbd5e1;
             }
             QPlainTextEdit {
                 background-color: #f8fafc;
@@ -519,7 +514,7 @@ class UARTShieldApp(QWidget):
         self.port_warning.hide()
         root_layout.addWidget(self.port_warning)
 
-        # 3. Hero Status Card (Houses Status Pill + Switch + Desc + Optional Install CTA)
+        # 3. Hero Status Card (Houses Status Pill + Switch + Desc)
         self.card = QFrame()
         self.card.setObjectName("card")
         card_layout = QVBoxLayout(self.card)
@@ -528,10 +523,9 @@ class UARTShieldApp(QWidget):
 
         # Card Top Row: Status Pill (Left) + Animated Switch (Right)
         card_top = QHBoxLayout()
-        self.lbl_pill = QLabel("Checking")
+        self.lbl_pill = QLabel("CHECKING")
         self.lbl_pill.setStyleSheet(
-            "background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; "
-            "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
+            f"background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; {PILL_STYLE_BASE}"
         )
         card_top.addWidget(self.lbl_pill)
         card_top.addStretch()
@@ -546,31 +540,23 @@ class UARTShieldApp(QWidget):
         self.lbl_desc.setStyleSheet("color: #475569; font-size: 12px; background: transparent; border: none;")
         card_layout.addWidget(self.lbl_desc)
 
-        # Prominent Install Button (Only visible if Stock Driver)
-        self.btn_install = QPushButton("Install Kernel Shield")
-        self.btn_install.setObjectName("btn_install")
-        self.btn_install.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_install.clicked.connect(self.patch_driver)
-        self.btn_install.hide()
-        card_layout.addWidget(self.btn_install)
-
         root_layout.addWidget(self.card)
 
-        # 4. Secondary Action Row (Rebuild Patch / Restore Stock)
+        # 4. Action Row (Patch Driver / Restore Stock - 70/30 ratio)
         actions = QHBoxLayout()
         actions.setSpacing(8)
 
-        self.btn_patch = QPushButton("Rebuild Patch")
+        self.btn_patch = QPushButton("Patch Driver")
         self.btn_patch.setObjectName("btn_patch")
         self.btn_patch.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_patch.clicked.connect(self.patch_driver)
-        actions.addWidget(self.btn_patch)
+        actions.addWidget(self.btn_patch, stretch=7)
 
         self.btn_restore = QPushButton("Restore Stock")
         self.btn_restore.setObjectName("btn_restore")
         self.btn_restore.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_restore.clicked.connect(self.restore_driver)
-        actions.addWidget(self.btn_restore)
+        actions.addWidget(self.btn_restore, stretch=3)
         root_layout.addLayout(actions)
 
         # 5. Activity Log (Always Visible)
@@ -643,8 +629,9 @@ class UARTShieldApp(QWidget):
 
         self.btn_scan.setEnabled(not operating)
         self.btn_patch.setEnabled(not operating and not self.is_port_locked)
-        self.btn_restore.setEnabled(not operating and not self.is_port_locked)
-        self.btn_install.setEnabled(not operating and not self.is_port_locked)
+        self.btn_restore.setEnabled(
+            not operating and not self.is_port_locked and self.current_param_exists
+        )
         self.combo_ports.setEnabled(not operating)
         self.switch.setEnabled(not operating and self.current_param_exists)
 
@@ -785,8 +772,6 @@ class UARTShieldApp(QWidget):
             lock_msg = f"Port is in use by {lock_name} (PID {lock_pid}). Close the application first."
             self.lbl_port_warning.setText(f"⚠ Port in use: {lock_name} (PID {lock_pid})")
             self.port_warning.show()
-            self.btn_install.setEnabled(False)
-            self.btn_install.setToolTip(lock_msg)
             self.btn_patch.setEnabled(False)
             self.btn_patch.setToolTip(lock_msg)
             self.btn_restore.setEnabled(False)
@@ -794,7 +779,6 @@ class UARTShieldApp(QWidget):
         else:
             self.is_port_locked = False
             self.port_warning.hide()
-            self.btn_install.setToolTip("")
             self.btn_patch.setToolTip("")
             self.btn_restore.setToolTip("")
 
@@ -807,32 +791,31 @@ class UARTShieldApp(QWidget):
                 with open(param_file, "r") as f:
                     val = f.read().strip()
                 if val in ("Y", "1"):
-                    # Shield Active
+                    # Patched Activated
                     self.current_protected = True
-                    self.lbl_pill.setText("● Shield Active")
+                    self.lbl_pill.setText("PATCHED ACTIVATED")
                     self.lbl_pill.setStyleSheet(
                         f"background: {COLOR_EMERALD_BG}; color: {COLOR_EMERALD}; "
-                        f"border: 1px solid {COLOR_EMERALD_BORDER}; border-radius: 10px; "
-                        "padding: 3px 10px; font-size: 11px; font-weight: bold;"
+                        f"border: 1px solid {COLOR_EMERALD_BORDER}; {PILL_STYLE_BASE}"
                     )
                     self.lbl_desc.setText("Hardware resets blocked (DTR held HIGH)")
                     self.switch.setChecked(True)
                     self.switch.setEnabled(True)
                 else:
-                    # Shield Inactive
+                    # Patched Inactive
                     self.current_protected = False
-                    self.lbl_pill.setText("○ Shield Inactive")
+                    self.lbl_pill.setText("PATCHED INACTIVE")
                     self.lbl_pill.setStyleSheet(
                         f"background: {COLOR_AMBER_BG}; color: {COLOR_AMBER}; "
-                        f"border: 1px solid {COLOR_AMBER_BORDER}; border-radius: 10px; "
-                        "padding: 3px 10px; font-size: 11px; font-weight: bold;"
+                        f"border: 1px solid {COLOR_AMBER_BORDER}; {PILL_STYLE_BASE}"
                     )
                     self.lbl_desc.setText("Default Linux mode (DTR asserts on connect)")
                     self.switch.setChecked(False)
                     self.switch.setEnabled(True)
 
-                self.btn_install.hide()
-                self.btn_patch.setText("Rebuild Patch")
+                self._set_patch_btn_mode(True)
+                self.btn_patch.setText(f"Rebuild Patch ({driver})")
+                self.btn_restore.setToolTip("")
             except Exception:
                 self._set_stock_state(driver)
         else:
@@ -840,7 +823,17 @@ class UARTShieldApp(QWidget):
 
         if not self.is_port_locked and not self.is_operating:
             self.btn_patch.setEnabled(True)
-            self.btn_restore.setEnabled(True)
+            if self.current_param_exists:
+                self.btn_restore.setEnabled(True)
+
+    def _set_patch_btn_mode(self, is_secondary: bool):
+        """
+        @brief Toggle primary (blue) vs secondary (white) styling on Patch Driver button.
+        @param is_secondary True for secondary outline button, False for primary blue CTA.
+        """
+        self.btn_patch.setProperty("secondary", is_secondary)
+        self.btn_patch.style().unpolish(self.btn_patch)
+        self.btn_patch.style().polish(self.btn_patch)
 
     def _set_stock_state(self, driver: str):
         """
@@ -849,19 +842,19 @@ class UARTShieldApp(QWidget):
         """
         self.current_param_exists = False
         self.current_protected = False
-        self.lbl_pill.setText("△ Stock Driver")
+        self.lbl_pill.setText("SYSTEM DEFAULT")
         self.lbl_pill.setStyleSheet(
-            "background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; "
-            "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
+            f"background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; {PILL_STYLE_BASE}"
         )
-        self.lbl_desc.setText(f"'{driver}' unpatched. Install shield to block resets.")
+        self.lbl_desc.setText(f"'{driver}' unpatched. Patch driver to block serial resets.")
         self.switch.setChecked(False, animated=False)
         self.switch.setEnabled(False)
 
-        self.btn_install.setText(f"Install Kernel Shield ({driver})")
-        self.btn_install.show()
-        self.btn_install.setEnabled(not self.is_port_locked and not self.is_operating)
+        self._set_patch_btn_mode(False)
         self.btn_patch.setText(f"Patch Driver ({driver})")
+        self.btn_patch.setEnabled(not self.is_port_locked and not self.is_operating)
+        self.btn_restore.setEnabled(False)
+        self.btn_restore.setToolTip("Cannot restore: driver is already the original factory driver.")
 
     def _set_no_device_state(self):
         """
@@ -870,15 +863,15 @@ class UARTShieldApp(QWidget):
         self.current_param_exists = False
         self.current_protected = False
         self.port_warning.hide()
-        self.lbl_pill.setText("No Device")
+        self.lbl_pill.setText("NO DEVICE")
         self.lbl_pill.setStyleSheet(
-            "background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; "
-            "border-radius: 10px; padding: 3px 10px; font-size: 11px; font-weight: bold;"
+            f"background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; {PILL_STYLE_BASE}"
         )
         self.lbl_desc.setText("Connect a USB-UART adapter or gimbal.")
         self.switch.setChecked(False, animated=False)
         self.switch.setEnabled(False)
-        self.btn_install.hide()
+        self._set_patch_btn_mode(True)
+        self.btn_patch.setText("Patch Driver")
         self.btn_patch.setEnabled(False)
         self.btn_restore.setEnabled(False)
 
@@ -942,7 +935,7 @@ class UARTShieldApp(QWidget):
             self.patch_driver()
             return
 
-        label = "Shield Active" if new_state else "Shield Inactive"
+        label = "PATCHED ACTIVATED" if new_state else "PATCHED INACTIVE"
         val_str = "Y" if new_state else "N"
 
         # 1. Attempt direct sysfs write (instant, 0-friction, no root password dialog)
@@ -989,8 +982,8 @@ class UARTShieldApp(QWidget):
         port = self._get_current_port()
         confirm = QMessageBox.question(
             self,
-            "Restore Stock Driver",
-            f"Restore original factory driver for '{driver}' ({port})?\n\n"
+            "Restore Original Driver",
+            f"Restore original system default driver for '{driver}' ({port})?\n\n"
             "Warning: This will remove reset protection and restore standard Ubuntu DTR/RTS behavior.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
