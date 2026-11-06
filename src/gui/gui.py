@@ -319,10 +319,24 @@ class UARTShieldApp(QWidget):
                 background-color: #ffffff;
                 border: 1px solid #cbd5e1;
                 border-radius: 8px;
-                selection-background-color: #2563eb;
-                selection-color: #ffffff;
+                selection-background-color: #f1f5f9;
+                selection-color: #0f172a;
                 color: #0f172a;
                 padding: 4px;
+                outline: 0px;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 28px;
+                padding: 4px 10px;
+                border: none;
+                border-radius: 6px;
+                color: #0f172a;
+            }
+            QComboBox QAbstractItemView::item:hover,
+            QComboBox QAbstractItemView::item:selected {
+                background-color: #f1f5f9;
+                color: #0f172a;
+                border: none;
                 outline: none;
             }
             QPushButton#btn_scan {
