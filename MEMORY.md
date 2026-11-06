@@ -115,6 +115,19 @@
      - In `cmd_restore()`, clean up the udev rule when no patched drivers remain.
 * **Consequences:** Zero password prompts when clicking the toggle switch, instant tactile feedback, and elimination of toggle bounce-backs.
 
+### [2026-11-06] ADR-13: Full Multi-Driver Patching Engine & Hardware Port Prioritization
+* **Context:** User clicked "Install Kernel Shield", log reported success, but status remained `△ Stock Driver` and physical testing showed no reset protection.
+* **Root Causes:**
+  1. **Alphabetical Port Inversion:** Python alphabetical sort placed `/dev/ttyACM0` (Linux for Tegra USB gadget) before `/dev/ttyUSB0` (CP2102N UART Bridge). The GUI defaulted to index 0, so the user unknowingly initiated patching for `cdc_acm` instead of `cp210x`.
+  2. **Incomplete Driver Support:** `patch_driver.py` lacked implementation for `cdc_acm` and `pl2303`, falling back to an inert stub that did not inject `disable_dtr_rts`.
+  3. **Non-Fatal Verification:** `uart_kernel_patch.sh` emitted a `warn` instead of `die` when `disable_dtr_rts` was absent in sysfs, returning exit code 0 and causing a false-positive success log.
+* **Decision:**
+  - Implemented complete deep-patch support for `cdc_acm` and `pl2303` in `src/core/patch_driver.py`.
+  - Made sysfs parameter verification strictly fatal in `src/core/uart_kernel_patch.sh` (`die` on missing parameter).
+  - Prioritized `ttyUSB*` ahead of `ttyACM*` and injected `udevadm` device model descriptions directly into the ComboBox.
+  - Dynamically branded install/patch buttons with target driver names (e.g. `Install Kernel Shield (cp210x)`).
+* **Consequences:** Physical UART bridges are selected first; all 5 major USB-UART/ACM drivers are fully protected; zero false-positive success logs.
+
 ---
 
 ## 3. Known Gotchas & Constraints
