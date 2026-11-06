@@ -29,8 +29,24 @@ from PyQt6.QtGui import (
     QPainterPath, QIcon, QPixmap
 )
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    BASE_DIR = sys._MEIPASS
+    CORE_SCRIPT = os.path.join(BASE_DIR, "core", "uart_kernel_patch.sh")
+    try:
+        os.chmod(sys._MEIPASS, 0o755)
+        core_dir = os.path.join(sys._MEIPASS, "core")
+        if os.path.isdir(core_dir):
+            os.chmod(core_dir, 0o755)
+        if os.path.isfile(CORE_SCRIPT):
+            os.chmod(CORE_SCRIPT, 0o755)
+        patch_py = os.path.join(core_dir, "patch_driver.py")
+        if os.path.isfile(patch_py):
+            os.chmod(patch_py, 0o755)
+    except Exception:
+        pass
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    CORE_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "core", "uart_kernel_patch.sh"))
 
 
 def _trim_memory():
