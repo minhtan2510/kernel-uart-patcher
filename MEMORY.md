@@ -138,7 +138,7 @@
      - **`SYSTEM DEFAULT` / `NO DEVICE`**:
        - Button 1 (`btn_patch`): Visible, primary CTA `#2563eb` with text `Patch Driver (<driver>)`.
        - Button 2 (`btn_restore`): Visible, disabled with tooltip: `"Cannot restore: driver is already the original factory driver."`.
-     - **`PATCHED ACTIVATED` / `PATCHED INACTIVE`**:
+     - **`PATCH ACTIVE` / `PATCH INACTIVE`**:
        - Button 1 (`btn_patch`): **Hidden completely** to eliminate confusion and focus user attention on the Toggle Switch.
        - Button 2 (`btn_restore`): Expands to full width with text `Restore Original Driver (<driver>)`, enabled with subtle border and red hover highlight.
   3. **Developer Rebuild Access:**
@@ -146,7 +146,7 @@
      - Keyboard shortcut `Ctrl+Shift+R` triggers forced rebuild.
   4. **Direct Status Badges:**
      - Removed all icons from the status badges.
-     - Standardized on exact terms: `PATCHED ACTIVATED`, `PATCHED INACTIVE`, `SYSTEM DEFAULT`, `NO DEVICE`.
+     - Standardized on exact terms: `PATCH ACTIVE`, `PATCH INACTIVE`, `SYSTEM DEFAULT`, `NO DEVICE`.
      - Upgraded typography and padding (`PILL_STYLE_BASE`: 12px bold, 5px 14px padding, 8px radius).
 * **Consequences:** Clean visual hierarchy; zero button redundancy; focus remains 100% on the toggle switch when protected; developer rebuild options remain readily accessible via shortcut and context menu.
 
@@ -172,13 +172,13 @@
 
 ### ADR-16: Prominent Status Badge Architecture with High-Contrast Theming
 * **Status:** Accepted (2026-11-06)
-* **Context:** The status badge in the hero card (`lbl_pill`) conveys critical hardware driver state (`PATCHED ACTIVATED`, `PATCHED INACTIVE`, `SYSTEM DEFAULT`). The previous `12px` font with subtle `1px` pastel border looked like a secondary tag rather than the primary visual focal point.
+* **Context:** The status badge in the hero card (`lbl_pill`) conveys critical hardware driver state (`PATCH ACTIVE`, `PATCH INACTIVE`, `SYSTEM DEFAULT`). The previous `12px` font with subtle `1px` pastel border looked like a secondary tag rather than the primary visual focal point.
 * **Decision:**
   - Increased typography size from `12px` to `14px` (`font-weight: bold; letter-spacing: 0.5px;`).
   - Increased padding from `5px 14px` to `7px 18px` with rounded radius `9px` (height scaled from 27px to 36px).
   - Doubled border thickness to `2px solid` with rich, high-contrast Tailwind palette:
-    - `PATCHED ACTIVATED`: Background `#dcfce7` (Emerald 100), Border `#10b981` (Emerald 500), Text `#047857` (Emerald 700).
-    - `PATCHED INACTIVE`: Background `#fef3c7` (Amber 100), Border `#f59e0b` (Amber 500), Text `#92400e` (Amber 800).
+    - `PATCH ACTIVE`: Background `#dcfce7` (Emerald 100), Border `#10b981` (Emerald 500), Text `#047857` (Emerald 700).
+    - `PATCH INACTIVE`: Background `#fef3c7` (Amber 100), Border `#f59e0b` (Amber 500), Text `#92400e` (Amber 800).
     - `SYSTEM DEFAULT`: Background `#f1f5f9` (Slate 100), Border `#94a3b8` (Slate 400), Text `#1e293b` (Slate 800).
   - Scaled animated toggle switch to `48x26` and centered both widgets vertically via `Qt.AlignmentFlag.AlignVCenter`.
 * **Consequences:** Immediately draws user attention to the current driver protection state while maintaining strict light-theme harmony.

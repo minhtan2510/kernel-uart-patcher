@@ -893,7 +893,7 @@ class UARTShieldApp(QWidget):
                 if val in ("Y", "1"):
                     # Patched Activated
                     self.current_protected = True
-                    self.lbl_pill.setText("PATCHED ACTIVATED")
+                    self.lbl_pill.setText("PATCH ACTIVE")
                     self.lbl_pill.setStyleSheet(
                         f"background: {COLOR_EMERALD_BG}; color: {COLOR_EMERALD}; "
                         f"border: 2px solid {COLOR_EMERALD_BORDER}; {PILL_STYLE_BASE}"
@@ -904,7 +904,7 @@ class UARTShieldApp(QWidget):
                 else:
                     # Patched Inactive
                     self.current_protected = False
-                    self.lbl_pill.setText("PATCHED INACTIVE")
+                    self.lbl_pill.setText("PATCH INACTIVE")
                     self.lbl_pill.setStyleSheet(
                         f"background: {COLOR_AMBER_BG}; color: {COLOR_AMBER}; "
                         f"border: 2px solid {COLOR_AMBER_BORDER}; {PILL_STYLE_BASE}"
@@ -1047,7 +1047,7 @@ class UARTShieldApp(QWidget):
             self.patch_driver()
             return
 
-        label = "PATCHED ACTIVATED" if new_state else "PATCHED INACTIVE"
+        label = "PATCH ACTIVE" if new_state else "PATCH INACTIVE"
         val_str = "Y" if new_state else "N"
 
         # 1. Attempt direct sysfs write (instant, 0-friction, no root password dialog)
