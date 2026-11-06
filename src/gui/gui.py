@@ -424,9 +424,9 @@ class UARTShieldApp(QWidget):
                 border: 1px solid #e2e8f0;
             }
             QPlainTextEdit {
-                background-color: #0b0f19;
-                color: #cbd5e1;
-                border: 1px solid #1e293b;
+                background-color: #ffffff;
+                color: #334155;
+                border: 1px solid #cbd5e1;
                 border-radius: 8px;
                 padding: 8px 10px;
                 font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace;
@@ -434,18 +434,18 @@ class UARTShieldApp(QWidget):
             }
             QScrollBar:vertical {
                 border: none;
-                background: #0b0f19;
+                background: transparent;
                 width: 6px;
                 margin: 2px 2px 2px 0px;
                 border-radius: 3px;
             }
             QScrollBar::handle:vertical {
-                background: #334155;
+                background: #cbd5e1;
                 min-height: 24px;
                 border-radius: 3px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #475569;
+                background: #94a3b8;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -653,15 +653,15 @@ class UARTShieldApp(QWidget):
         if re.match(r"^\[ACTION\]", body):
             return (
                 f"<div style=\"margin-top: 6px; margin-bottom: 2px; "
-                f"color: #60a5fa; font-weight: bold;\">▶ {escaped_body}</div>"
+                f"color: #1d4ed8; font-weight: bold;\">▶ {escaped_body}</div>"
             )
 
         # 2. Terminal Success banner
         if re.match(r"^\[(DONE|SUCCESS)\]", body):
             return (
                 f"<div style=\"margin: 4px 0px; padding: 4px 8px; "
-                f"background-color: #064e3b; border: 1px solid #059669; "
-                f"color: #6ee7b7; font-weight: bold; border-radius: 5px;\">"
+                f"background-color: #ecfdf5; border: 1px solid #a7f3d0; "
+                f"color: #15803d; font-weight: bold; border-radius: 6px;\">"
                 f"✓ {escaped_body}</div>"
             )
 
@@ -669,8 +669,8 @@ class UARTShieldApp(QWidget):
         if re.match(r"^(\[(FAIL|ERROR)\]|Error\b)", body):
             return (
                 f"<div style=\"margin: 4px 0px; padding: 4px 8px; "
-                f"background-color: #450a0a; border: 1px solid #dc2626; "
-                f"color: #fca5a5; font-weight: bold; border-radius: 5px;\">"
+                f"background-color: #fef2f2; border: 1px solid #fecaca; "
+                f"color: #b91c1c; font-weight: bold; border-radius: 6px;\">"
                 f"✗ {escaped_body}</div>"
             )
 
@@ -678,43 +678,43 @@ class UARTShieldApp(QWidget):
         if re.match(r"^\[CANCEL\]", body):
             return (
                 f"<div style=\"margin: 3px 0px; padding: 3px 6px; "
-                f"background-color: #1e293b; border: 1px solid #334155; "
-                f"color: #94a3b8; font-weight: bold; border-radius: 4px;\">"
+                f"background-color: #f1f5f9; border: 1px solid #e2e8f0; "
+                f"color: #64748b; font-weight: bold; border-radius: 4px;\">"
                 f"⊘ {escaped_body}</div>"
             )
 
         # 5. Step OK
         if re.match(r"^\[OK\]", body):
             return (
-                f"{indent_prefix}<span style=\"color: #34d399; font-weight: bold;\">"
+                f"{indent_prefix}<span style=\"color: #16a34a; font-weight: bold;\">"
                 f"✓ {escaped_body}</span>"
             )
 
         # 6. Step Error
         if re.match(r"^\[ERR\]", body):
             return (
-                f"{indent_prefix}<span style=\"color: #f87171; font-weight: bold;\">"
+                f"{indent_prefix}<span style=\"color: #dc2626; font-weight: bold;\">"
                 f"✗ {escaped_body}</span>"
             )
 
         # 7. Step Warning
         if re.match(r"^(\[WARN\]|\[\!\!\])", body):
             return (
-                f"{indent_prefix}<span style=\"color: #fbbf24; font-weight: bold;\">"
+                f"{indent_prefix}<span style=\"color: #b45309; font-weight: bold;\">"
                 f"⚠ {escaped_body}</span>"
             )
 
         # 8. Step Info
         if re.match(r"^\[INFO\]", body):
             return (
-                f"{indent_prefix}<span style=\"color: #38bdf8; font-weight: bold;\">"
+                f"{indent_prefix}<span style=\"color: #0284c7; font-weight: bold;\">"
                 f"ℹ {escaped_body}</span>"
             )
 
         # 9. Standard info / compiler chatter
         if indent_spaces > 0:
             return f"{indent_prefix}<span style=\"color: #64748b;\">{escaped_body}</span>"
-        return f"<span style=\"color: #cbd5e1;\">{escaped_body}</span>"
+        return f"<span style=\"color: #334155;\">{escaped_body}</span>"
 
     def set_operating(self, operating: bool, task_name: str = ""):
         """

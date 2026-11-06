@@ -150,24 +150,25 @@
      - Upgraded typography and padding (`PILL_STYLE_BASE`: 12px bold, 5px 14px padding, 8px radius).
 * **Consequences:** Clean visual hierarchy; zero button redundancy; focus remains 100% on the toggle switch when protected; developer rebuild options remain readily accessible via shortcut and context menu.
 
-### [2026-11-06] ADR-15: Modern Semantic Terminal Log Console with Visual Outcome Banners
+### [2026-11-06] ADR-15: Synchronized Light Semantic Log Console with Visual Outcome Banners
 * **Context:** The activity log previously rendered all messages in monochrome gray inside a white box. Success, errors, build steps, and action triggers looked identical, making it difficult for users to visually confirm whether long operations (patching, compiling, restoring) succeeded or failed.
 * **Decision:**
-  1. **Dark Slate Terminal Console (`#0b0f19`):**
-     - Shifted `QPlainTextEdit` background to authentic developer dark slate `#0b0f19` with subtle border `#1e293b`.
+  1. **Synchronized Light Console (`#ffffff`):**
+     - Retained pure white `#ffffff` background with `#cbd5e1` border and rounded 8px corners to preserve 100% theme consistency with the hero card and controls.
      - Monospaced typography with crisp rendering and comfortable padding (`8px 10px`).
-     - Minimalist dark vertical scrollbar styling.
-  2. **Semantic Color & Outcome Highlighting:**
-     - **Action Header (`[ACTION]`):** Highlighted in vibrant blue (`#60a5fa`) with prefix `▶`.
-     - **Success Banner (`[DONE]` / `[SUCCESS]`):** Prominent emerald banner with dark green fill (`#064e3b`), green border (`#059669`), and bright text (`#6ee7b7`) with prefix `✓`.
-     - **Failure Banner (`[FAIL]` / `[ERROR]`):** Prominent crimson banner with dark red fill (`#450a0a`), red border (`#dc2626`), and bright text (`#fca5a5`) with prefix `✗`.
-     - **Milestone Steps (`[OK]`):** Neon emerald (`#34d399`) with checkmark `✓`.
-     - **Step Errors (`[ERR]`):** Neon red (`#f87171`) with crossmark `✗`.
-     - **Warnings (`[WARN]`, `[!!]`):** Amber (`#fbbf24`) with warning sign `⚠`.
-     - **Background/Compiler Output:** Soft muted slate (`#64748b` for indented lines, `#cbd5e1` for body text).
+     - Minimalist light vertical scrollbar styling.
+  2. **Semantic Color & Outcome Highlighting on Light Background:**
+     - **Action Header (`[ACTION]`):** Highlighted in bold blue (`#1d4ed8`) with prefix `▶`.
+     - **Success Banner (`[DONE]` / `[SUCCESS]`):** Prominent emerald chip with light green fill (`#ecfdf5`), soft border (`#a7f3d0`), and deep green text (`#15803d`) with prefix `✓`.
+     - **Failure Banner (`[FAIL]` / `[ERROR]`):** Prominent crimson chip with light red fill (`#fef2f2`), soft border (`#fecaca`), and deep red text (`#b91c1c`) with prefix `✗`.
+     - **Milestone Steps (`[OK]`):** Forest green (`#16a34a`) with checkmark `✓`.
+     - **Step Errors (`[ERR]`):** Crimson red (`#dc2626`) with crossmark `✗`.
+     - **Warnings (`[WARN]`, `[!!]`):** Amber (`#b45309`) with warning sign `⚠`.
+     - **Cancel Notice (`[CANCEL]`):** Neutral light gray chip (`#f1f5f9`, `#64748b`) with prefix `⊘`.
+     - **Background/Compiler Output:** Soft muted slate (`#64748b` for indented lines, `#334155` for standard text).
   3. **Auto-Scrolling:**
      - Dynamically scrolls `QPlainTextEdit` to the maximum vertical scroll value upon each new line appended.
-* **Consequences:** Instant visual comprehension of operation outcomes from across the room; zero ambiguity between successful kernel builds and compilation failures; clean terminal aesthetic suitable for embedded systems developers.
+* **Consequences:** Seamless aesthetic consistency across the light interface; instant visual comprehension of operation outcomes without visual jarring.
 
 ---
 
