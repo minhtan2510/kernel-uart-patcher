@@ -15,18 +15,46 @@ Completely neutralizes DTR and RTS assertion (pin pulled LOW) across all paths:
 import sys
 import re
 
-def patch_cp210x(content: str) -> str:
-    # 1. Add module parameter
-    mod_param = """
+SMART_BYPASS_HEADER = """
+#include <linux/jiffies.h>
+
 /* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
 static bool disable_dtr_rts = true;
 module_param(disable_dtr_rts, bool, 0644);
 MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
+
+/* Added by uart_deep_patch: Smart sequence detection for flashing (Cải tiến 2) */
+static bool smart_bypass = true;
+module_param(smart_bypass, bool, 0644);
+MODULE_PARM_DESC(smart_bypass, "Allow rapid multi-toggle flashing sequence while blocking single open (default: true)");
+
+static unsigned long last_toggle_jiffies = 0;
+static int toggle_seq_count = 0;
+
+static inline bool is_flashing_sequence(void)
+{
+	unsigned long now = jiffies;
+	if (!smart_bypass)
+		return false;
+
+	if (time_after(now, last_toggle_jiffies + msecs_to_jiffies(600))) {
+		toggle_seq_count = 1;
+		last_toggle_jiffies = now;
+		return false;
+	}
+
+	toggle_seq_count++;
+	last_toggle_jiffies = now;
+	return (toggle_seq_count >= 2);
+}
 """
+
+def patch_cp210x(content: str) -> str:
+    # 1. Add module parameter & smart bypass sequence detector
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in cp210x.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + SMART_BYPASS_HEADER, 1)
 
     # 2. Force DTR/RTS inactive immediately upon opening UART in cp210x_open
     open_pattern = re.compile(
@@ -48,7 +76,7 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     if n == 0:
         raise ValueError("Failed to patch cp210x_open")
 
-    # 3. Intercept cp210x_tiocmset_port specifically
+    # 3. Intercept cp210x_tiocmset_port specifically (Single open blocked, sequence pattern permitted)
     tiocmset_pattern = re.compile(
         r'(static int cp210x_tiocmset_port\(struct usb_serial_port \*port,\s*'
         r'unsigned int set, unsigned int clear\)\s*\{[^}]*?u16 control = 0;\s*int ret;)',
@@ -56,8 +84,8 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     )
     tiocmset_replacement = r"""\1
 
-	if (disable_dtr_rts) {
-		/* Deep patch: intercept and block any DTR/RTS assertion from userspace or kernel */
+	if (disable_dtr_rts && !is_flashing_sequence()) {
+		/* Deep patch: intercept and block single open DTR/RTS assertion */
 		set &= ~(TIOCM_DTR | TIOCM_RTS);
 		clear |= (TIOCM_DTR | TIOCM_RTS);
 	}"""
@@ -75,7 +103,7 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     dtr_replacement = """static void cp210x_dtr_rts(struct usb_serial_port *port, int on)
 {
 	if (disable_dtr_rts) {
-		/* Deep patch: always force DTR/RTS inactive regardless of 'on' */
+		/* Deep patch: always force DTR/RTS inactive on port_open/close callback */
 		cp210x_tiocmset_port(port, 0, TIOCM_DTR | TIOCM_RTS);
 		return;
 	}
@@ -105,17 +133,11 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     return content
 
 def patch_ch341(content: str) -> str:
-    # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
+    # 1. Add module parameter & smart bypass sequence detector
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in ch341.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + SMART_BYPASS_HEADER, 1)
 
     # 2. Patch ch341_tiocmset
     tiocmset_pattern = re.compile(
@@ -124,7 +146,7 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
         re.MULTILINE | re.DOTALL
     )
     tiocmset_repl = r"""\1
-	if (disable_dtr_rts) {
+	if (disable_dtr_rts && !is_flashing_sequence()) {
 		set &= ~(TIOCM_DTR | TIOCM_RTS);
 		clear |= (TIOCM_DTR | TIOCM_RTS);
 	}
@@ -147,21 +169,15 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     return content
 
 def patch_ftdi(content: str) -> str:
-    # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
+    # 1. Add module parameter & smart bypass sequence detector
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in ftdi_sio.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + SMART_BYPASS_HEADER, 1)
 
     # 2. Patch update_mctrl
     target_mctrl = "clear &= ~set;\t/* 'set' takes precedence over 'clear' */"
-    repl_mctrl = """if (disable_dtr_rts) {
+    repl_mctrl = """if (disable_dtr_rts && !is_flashing_sequence()) {
 		set &= ~(TIOCM_DTR | TIOCM_RTS);
 		clear |= (TIOCM_DTR | TIOCM_RTS);
 	}
@@ -173,17 +189,11 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     return content
 
 def patch_cdc_acm(content: str) -> str:
-    # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
+    # 1. Add module parameter & smart bypass sequence detector
     target = '#include <linux/module.h>'
     if target not in content:
         raise ValueError("Target include not found in cdc-acm.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + SMART_BYPASS_HEADER, 1)
 
     # 2. Patch acm_port_dtr_rts
     dtr_target = "if (active)\n\t\tval = USB_CDC_CTRL_DTR | USB_CDC_CTRL_RTS;\n\telse\n\t\tval = 0;"
@@ -211,7 +221,7 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
         re.MULTILINE
     )
     tiocmset_repl = r"""\1
-	if (disable_dtr_rts) {
+	if (disable_dtr_rts && !is_flashing_sequence()) {
 		set &= ~(TIOCM_DTR | TIOCM_RTS);
 		clear |= (TIOCM_DTR | TIOCM_RTS);
 	}"""
@@ -222,17 +232,11 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     return content
 
 def patch_pl2303(content: str) -> str:
-    # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
+    # 1. Add module parameter & smart bypass sequence detector
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in pl2303.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + SMART_BYPASS_HEADER, 1)
 
     # 2. Patch pl2303_dtr_rts
     dtr_target = "if (on)\n\t\tpriv->line_control |= (CONTROL_DTR | CONTROL_RTS);\n\telse\n\t\tpriv->line_control &= ~(CONTROL_DTR | CONTROL_RTS);"
@@ -260,7 +264,7 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
         re.MULTILINE
     )
     tiocmset_repl = r"""\1
-	if (disable_dtr_rts) {
+	if (disable_dtr_rts && !is_flashing_sequence()) {
 		set &= ~(TIOCM_DTR | TIOCM_RTS);
 		clear |= (TIOCM_DTR | TIOCM_RTS);
 	}"""

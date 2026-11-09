@@ -18,11 +18,13 @@ import re
 import html
 import ctypes
 import gc
+import json
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
     QStyledItemDelegate, QStyleOptionViewItem, QStyle, QMenu,
-    QSystemTrayIcon, QCheckBox
+    QSystemTrayIcon, QCheckBox, QDialog, QFormLayout, QDialogButtonBox,
+    QGroupBox
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QThread, pyqtSignal, QPropertyAnimation,
@@ -68,6 +70,45 @@ AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
 AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, "kernel-uart-patcher.desktop")
 APP_ICON_DIR = os.path.expanduser("~/.local/share/icons")
 APP_ICON_FILE = os.path.join(APP_ICON_DIR, "kernel-uart-patcher.png")
+
+CONFIG_DIR = os.path.expanduser("~/.config/kernel-uart-patcher")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+
+DEFAULT_CONFIG = {
+    "dtr_role": "Reset",
+    "rts_role": "Boot",
+    "smart_bypass": True,
+}
+
+
+def load_user_config() -> dict:
+    """
+    @brief Load user settings from JSON file with fallback defaults.
+    @return Configuration dictionary.
+    """
+    cfg = dict(DEFAULT_CONFIG)
+    if os.path.isfile(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    cfg.update(data)
+        except Exception:
+            pass
+    return cfg
+
+
+def save_user_config(cfg: dict):
+    """
+    @brief Persist configuration dictionary to user config directory.
+    @param cfg Configuration dictionary to save.
+    """
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
 
 # ------------------------------------------------------------------------------
 # Modern Minimalist Light Palette (Tailwind Slate / Zinc inspired)
@@ -340,22 +381,29 @@ class CommandWorker(QThread):
 # ------------------------------------------------------------------------------
 class ResetWorker(QThread):
     """
-    @brief Asynchronous worker to pulse DTR/RTS lines for MCU hardware reset.
+    @brief Asynchronous worker to pulse DTR/RTS lines for MCU hardware reset or bootloader entry.
     """
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
 
-    def __init__(self, port: str, driver: str, was_patch_active: bool):
+    def __init__(self, port: str, driver: str, was_patch_active: bool,
+                 dtr_role: str = "Reset", rts_role: str = "Boot", mode: str = "reset"):
         """
         @brief Initialize reset worker.
         @param port Serial port device path (e.g. /dev/ttyUSB0).
         @param driver Driver module name (e.g. cp210x, ftdi_sio).
         @param was_patch_active Whether kernel driver reset shield was active.
+        @param dtr_role Assigned function for DTR pin ('Reset' or 'Boot').
+        @param rts_role Assigned function for RTS pin ('Boot' or 'Reset').
+        @param mode Operation mode: 'reset' (normal reboot) or 'bootloader' (enter ROM DFU).
         """
         super().__init__()
         self.port = port
         self.driver = driver
         self.was_patch_active = was_patch_active
+        self.dtr_role = dtr_role
+        self.rts_role = rts_role
+        self.mode = mode
 
     def _write_param(self, path: str, val: str):
         """
@@ -375,54 +423,67 @@ class ResetWorker(QThread):
                 stderr=subprocess.DEVNULL
             )
 
-    def _pulse_reset(self, port_path: str):
+    def _pulse_lines(self, port_path: str):
         """
-        @brief Pulse DTR and RTS modem control lines via ioctl to reset target hardware.
+        @brief Pulse DTR and RTS modem control lines according to Pin Mapping and mode.
         @param port_path TTY device path (e.g. /dev/ttyUSB0).
         """
         fd = os.open(port_path, os.O_RDWR | os.O_NONBLOCK | os.O_NOCTTY)
         try:
-            # Step 1: Assert RTS, De-assert DTR (ESP32 EN active LOW; prepare Arduino DTR edge)
-            fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", termios.TIOCM_RTS))
-            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", termios.TIOCM_DTR))
-            time.sleep(0.12)
+            reset_bit = termios.TIOCM_DTR if self.dtr_role == "Reset" else termios.TIOCM_RTS
+            boot_bit = termios.TIOCM_RTS if self.dtr_role == "Reset" else termios.TIOCM_DTR
 
-            # Step 2: Assert DTR, De-assert RTS (Pulse Arduino/STM32 NRST cap; release ESP32 EN)
-            fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", termios.TIOCM_DTR))
-            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", termios.TIOCM_RTS))
-            time.sleep(0.12)
-
-            # Step 3: Release both lines back to idle (HIGH)
-            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", termios.TIOCM_DTR | termios.TIOCM_RTS))
-            time.sleep(0.05)
+            if self.mode == "bootloader":
+                # Sequence to enter ROM Bootloader / Download Mode:
+                # 1. Assert Boot line (pull GPIO0/BOOT0 LOW)
+                fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", boot_bit))
+                time.sleep(0.05)
+                # 2. Assert Reset line (pull EN/NRST LOW)
+                fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", reset_bit))
+                time.sleep(0.12)
+                # 3. Release Reset line (EN/NRST goes HIGH, MCU starts with Boot=LOW)
+                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", reset_bit))
+                time.sleep(0.12)
+                # 4. Release Boot line (GPIO0/BOOT0 back to HIGH)
+                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", boot_bit))
+                time.sleep(0.05)
+            else:
+                # Normal Reboot (Run Mode):
+                # Ensure Boot line is INACTIVE (HIGH) while Reset is pulsed LOW
+                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", boot_bit))
+                time.sleep(0.02)
+                fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", reset_bit))
+                time.sleep(0.15)
+                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", reset_bit))
+                time.sleep(0.05)
         finally:
             os.close(fd)
 
     def run(self):
         """
-        @brief Execute reset sequence: temporarily unshield, pulse reset, and restore shield.
+        @brief Execute reset/bootloader sequence: temporarily unshield, pulse lines, and restore shield.
         """
         param_file = f"/sys/module/{self.driver}/parameters/disable_dtr_rts" if self.driver else ""
         has_param = bool(param_file and os.path.isfile(param_file))
         success = False
-        msg = ""
+        action_name = "Bootloader entry" if self.mode == "bootloader" else "Hardware reset"
 
         try:
             if self.was_patch_active and has_param:
                 self.log_signal.emit(f"[RESET] Temporarily disarming reset shield on {self.driver}...")
                 self._write_param(param_file, "N")
 
-            self.log_signal.emit(f"[RESET] Pulsing DTR/RTS lines on {self.port}...")
-            self._pulse_reset(self.port)
+            self.log_signal.emit(f"[RESET] Pulsing {action_name} on {self.port} (DTR={self.dtr_role}, RTS={self.rts_role})...")
+            self._pulse_lines(self.port)
 
-            self.log_signal.emit(f"[SUCCESS] Hardware reset triggered on {self.port}.")
+            self.log_signal.emit(f"[SUCCESS] {action_name} triggered successfully on {self.port}.")
             success = True
-            msg = f"Reset {self.port} OK"
+            msg = f"{action_name} {self.port} OK"
 
         except Exception as e:
-            self.log_signal.emit(f"[ERROR] Reset failed: {e}")
+            self.log_signal.emit(f"[ERROR] {action_name} failed: {e}")
             success = False
-            msg = f"Reset failed: {e}"
+            msg = f"{action_name} failed: {e}"
 
         finally:
             if self.was_patch_active and has_param:
@@ -434,6 +495,177 @@ class ResetWorker(QThread):
                     self.log_signal.emit(f"[WARN] Failed to re-arm shield: {e}")
 
             self.finished_signal.emit(success, msg)
+
+
+# ------------------------------------------------------------------------------
+# Settings & Pin Mapping Dialog
+# ------------------------------------------------------------------------------
+class PreferencesDialog(QDialog):
+    """
+    @brief Modal preferences dialog for Hardware Pin Mapping and Smart Flashing Bypass.
+    """
+    def __init__(self, parent=None, config=None, current_driver="", current_port=""):
+        super().__init__(parent)
+        self.setWindowTitle("Settings — Pin Mapping & Smart Flashing")
+        self.setFixedSize(460, 380)
+        self.config = dict(config or DEFAULT_CONFIG)
+        self.current_driver = current_driver
+        self.current_port = current_port
+        self.saved = False
+
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        # 1. Hardware Pin Mapping Group
+        grp_pins = QGroupBox("Hardware Pin Role Mapping")
+        grp_pins.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 12px;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 14px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+            }
+        """)
+        pin_layout = QFormLayout(grp_pins)
+        pin_layout.setContentsMargins(12, 10, 12, 10)
+        pin_layout.setSpacing(10)
+
+        lbl_desc = QLabel("Assign serial modem control lines to target MCU Reset (EN) and Boot (GPIO0) pins:")
+        lbl_desc.setWordWrap(True)
+        lbl_desc.setStyleSheet("color: #475569; font-size: 11px; font-weight: normal;")
+        pin_layout.addRow(lbl_desc)
+
+        self.cmb_dtr = QComboBox()
+        self.cmb_dtr.addItems(["Reset (NRST / EN)", "Boot Mode (GPIO0 / BOOT0)"])
+
+        self.cmb_rts = QComboBox()
+        self.cmb_rts.addItems(["Boot Mode (GPIO0 / BOOT0)", "Reset (NRST / EN)"])
+
+        # Set initial values
+        if self.config.get("dtr_role") == "Boot":
+            self.cmb_dtr.setCurrentIndex(1)
+            self.cmb_rts.setCurrentIndex(1)
+        else:
+            self.cmb_dtr.setCurrentIndex(0)
+            self.cmb_rts.setCurrentIndex(0)
+
+        self.cmb_dtr.currentIndexChanged.connect(self._on_dtr_changed)
+        self.cmb_rts.currentIndexChanged.connect(self._on_rts_changed)
+
+        pin_layout.addRow("DTR Line:", self.cmb_dtr)
+        pin_layout.addRow("RTS Line:", self.cmb_rts)
+
+        layout.addWidget(grp_pins)
+
+        # 2. Smart Flashing Bypass Group
+        grp_bypass = QGroupBox("Smart Flashing Bypass (Cải tiến 2)")
+        grp_bypass.setStyleSheet(grp_pins.styleSheet())
+        bypass_layout = QVBoxLayout(grp_bypass)
+        bypass_layout.setContentsMargins(12, 10, 12, 10)
+        bypass_layout.setSpacing(6)
+
+        self.chk_bypass = QCheckBox("Enable Smart Flashing Bypass (Sequence Pattern)")
+        self.chk_bypass.setChecked(self.config.get("smart_bypass", True))
+        self.chk_bypass.setStyleSheet("font-weight: bold; font-size: 12px; color: #0f172a;")
+        bypass_layout.addWidget(self.chk_bypass)
+
+        lbl_bypass_desc = QLabel(
+            "• Single open() events (gTune, MissionPlanner, monitors) are 100% blocked from resetting the MCU.\n"
+            "• Rapid toggle sequences (esptool, avrdude, stm32flash) are automatically permitted for flashing."
+        )
+        lbl_bypass_desc.setWordWrap(True)
+        lbl_bypass_desc.setStyleSheet("color: #475569; font-size: 11px;")
+        bypass_layout.addWidget(lbl_bypass_desc)
+
+        layout.addWidget(grp_bypass)
+
+        # 3. Actions Row
+        act_row = QHBoxLayout()
+        act_row.setSpacing(8)
+
+        if self.parent() and hasattr(self.parent(), "trigger_bootloader"):
+            self.btn_bootloader = QPushButton("Enter Bootloader (DFU)")
+            self.btn_bootloader.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.btn_bootloader.setStyleSheet("""
+                QPushButton {
+                    background-color: #f1f5f9;
+                    color: #475569;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    padding: 5px 10px;
+                    font-size: 11px;
+                }
+                QPushButton:hover {
+                    background-color: #e2e8f0;
+                    color: #0f172a;
+                }
+            """)
+            self.btn_bootloader.clicked.connect(self._on_bootloader_clicked)
+            act_row.addWidget(self.btn_bootloader)
+
+        act_row.addStretch()
+
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.setStyleSheet("background: transparent; color: #64748b; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 12px;")
+        btn_cancel.clicked.connect(self.reject)
+        act_row.addWidget(btn_cancel)
+
+        btn_save = QPushButton("Save Settings")
+        btn_save.setStyleSheet("background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 12px; border: none; border-radius: 6px; padding: 5px 14px;")
+        btn_save.clicked.connect(self._save_and_accept)
+        act_row.addWidget(btn_save)
+
+        layout.addLayout(act_row)
+
+    def _on_dtr_changed(self, idx: int):
+        """
+        @brief Automatically invert RTS when DTR is modified.
+        @param idx Selected index in DTR combo.
+        """
+        self.cmb_rts.blockSignals(True)
+        self.cmb_rts.setCurrentIndex(0 if idx == 0 else 1)
+        self.cmb_rts.blockSignals(False)
+
+    def _on_rts_changed(self, idx: int):
+        """
+        @brief Automatically invert DTR when RTS is modified.
+        @param idx Selected index in RTS combo.
+        """
+        self.cmb_dtr.blockSignals(True)
+        self.cmb_dtr.setCurrentIndex(0 if idx == 0 else 1)
+        self.cmb_dtr.blockSignals(False)
+
+    def _on_bootloader_clicked(self):
+        """
+        @brief Trigger bootloader pulse using current uncommitted mapping.
+        """
+        dtr_role = "Reset" if self.cmb_dtr.currentIndex() == 0 else "Boot"
+        rts_role = "Boot" if self.cmb_rts.currentIndex() == 0 else "Reset"
+        if self.parent() and hasattr(self.parent(), "trigger_bootloader"):
+            self.parent().trigger_bootloader(dtr_role=dtr_role, rts_role=rts_role)
+
+    def _save_and_accept(self):
+        """
+        @brief Apply changes to config dictionary and close dialog.
+        """
+        self.config["dtr_role"] = "Reset" if self.cmb_dtr.currentIndex() == 0 else "Boot"
+        self.config["rts_role"] = "Boot" if self.cmb_rts.currentIndex() == 0 else "Reset"
+        self.config["smart_bypass"] = self.chk_bypass.isChecked()
+        save_user_config(self.config)
+        self.saved = True
+        self.accept()
 
 
 # ------------------------------------------------------------------------------
@@ -464,6 +696,7 @@ class UARTShieldApp(QWidget):
         self._tray_last_state = ""
         self.tray = None
         self._tray_icons = {}
+        self.config = load_user_config()
 
         self._setup_window()
         self._build_ui()
@@ -479,6 +712,7 @@ class UARTShieldApp(QWidget):
 
         # Initial device scan first, then initialize tray with accurate state
         self.refresh_devices()
+        self._apply_smart_bypass_to_driver()
         self._setup_tray()
 
         if self.start_minimized:
@@ -557,6 +791,25 @@ class UARTShieldApp(QWidget):
                 border: 1px solid #94a3b8;
             }
             QPushButton#btn_reset:disabled {
+                color: #cbd5e1;
+                border: 1px solid #f1f5f9;
+                background-color: transparent;
+            }
+            QPushButton#btn_settings {
+                background-color: #ffffff;
+                color: #64748b;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-size: 11px;
+                font-weight: 500;
+            }
+            QPushButton#btn_settings:hover {
+                background-color: #f1f5f9;
+                color: #0f172a;
+                border: 1px solid #94a3b8;
+            }
+            QPushButton#btn_settings:disabled {
                 color: #cbd5e1;
                 border: 1px solid #f1f5f9;
                 background-color: transparent;
@@ -655,6 +908,7 @@ class UARTShieldApp(QWidget):
         QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.refresh_devices)
         QShortcut(QKeySequence("Ctrl+Shift+R"), self, lambda: self.patch_driver(force=True))
         QShortcut(QKeySequence("Ctrl+T"), self, self.trigger_reset)
+        QShortcut(QKeySequence("Ctrl+,"), self, self.open_preferences)
         QShortcut(QKeySequence("Ctrl+Q"), self, self._quit_app)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.close)
 
@@ -762,6 +1016,15 @@ class UARTShieldApp(QWidget):
         self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_reset.clicked.connect(self.trigger_reset)
         ftr.addWidget(self.btn_reset)
+
+        ftr.addSpacing(6)
+
+        self.btn_settings = QPushButton("⚙ Settings")
+        self.btn_settings.setObjectName("btn_settings")
+        self.btn_settings.setToolTip("Hardware Pin Mapping (DTR/RTS) and Smart Flashing Bypass")
+        self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_settings.clicked.connect(self.open_preferences)
+        ftr.addWidget(self.btn_settings)
 
         ftr.addSpacing(10)
 
@@ -945,6 +1208,7 @@ class UARTShieldApp(QWidget):
 
         self.btn_scan.setEnabled(not operating)
         self.btn_reset.setEnabled(not operating and bool(self.devices))
+        self.btn_settings.setEnabled(not operating)
         self.btn_patch.setEnabled(
             not operating and not self.is_port_locked and not self.current_param_exists
         )
@@ -1462,14 +1726,21 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 3. Trigger Hardware Reset
+        # 3. Trigger Hardware Reset & Bootloader
         self.tray_act_reset = self.tray_menu.addAction("Trigger Hardware Reset")
         self.tray_act_reset.setEnabled(False)
         self.tray_act_reset.triggered.connect(self.trigger_reset)
 
+        self.tray_act_bootloader = self.tray_menu.addAction("Enter Bootloader Mode")
+        self.tray_act_bootloader.setEnabled(False)
+        self.tray_act_bootloader.triggered.connect(lambda: self.trigger_bootloader())
+
         self.tray_menu.addSeparator()
 
-        # 4. Checkable Start on Boot
+        # 4. Settings & Autostart
+        act_settings = self.tray_menu.addAction("Pin Mapping & Settings...")
+        act_settings.triggered.connect(self.open_preferences)
+
         self.tray_act_autostart = self.tray_menu.addAction("Start Minimized on Boot")
         self.tray_act_autostart.setCheckable(True)
         self.tray_act_autostart.setChecked(self._is_autostart_enabled())
@@ -1544,9 +1815,13 @@ class UARTShieldApp(QWidget):
         if port and self.devices:
             self.tray_act_reset.setText(f"Trigger Reset ({port})")
             self.tray_act_reset.setEnabled(not self.is_operating)
+            self.tray_act_bootloader.setText(f"Enter Bootloader ({port})")
+            self.tray_act_bootloader.setEnabled(not self.is_operating)
         else:
             self.tray_act_reset.setText("Trigger Hardware Reset")
             self.tray_act_reset.setEnabled(False)
+            self.tray_act_bootloader.setText("Enter Bootloader Mode")
+            self.tray_act_bootloader.setEnabled(False)
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """
@@ -1855,11 +2130,98 @@ class UARTShieldApp(QWidget):
             except Exception:
                 was_patch_active = self.current_protected
 
+        dtr_role = self.config.get("dtr_role", "Reset")
+        rts_role = self.config.get("rts_role", "Boot")
+
         self.set_operating(True, f"Resetting {port}")
-        self.worker = ResetWorker(port, driver, was_patch_active)
+        self.worker = ResetWorker(
+            port, driver, was_patch_active,
+            dtr_role=dtr_role, rts_role=rts_role, mode="reset"
+        )
         self.worker.log_signal.connect(self.log)
         self.worker.finished_signal.connect(self._on_reset_finished)
         self.worker.start()
+
+    def trigger_bootloader(self, dtr_role: str = None, rts_role: str = None):
+        """
+        @brief Trigger bootloader entry sequence using active Pin Mapping.
+        @param dtr_role Override DTR role if specified from settings preview.
+        @param rts_role Override RTS role if specified from settings preview.
+        """
+        if self.is_operating:
+            return
+
+        port = self._get_current_port()
+        driver = self._get_current_driver()
+        if not port or not os.path.exists(port):
+            self.log("[WARN] No valid serial port connected to trigger bootloader.")
+            return
+
+        dtr_role = dtr_role or self.config.get("dtr_role", "Reset")
+        rts_role = rts_role or self.config.get("rts_role", "Boot")
+
+        param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts" if driver else ""
+        was_patch_active = False
+        if param_file and os.path.isfile(param_file):
+            try:
+                with open(param_file, "r") as f:
+                    was_patch_active = f.read().strip() in ("Y", "1")
+            except Exception:
+                was_patch_active = self.current_protected
+
+        self.set_operating(True, f"Entering Bootloader on {port}")
+        self.worker = ResetWorker(
+            port, driver, was_patch_active,
+            dtr_role=dtr_role, rts_role=rts_role, mode="bootloader"
+        )
+        self.worker.log_signal.connect(self.log)
+        self.worker.finished_signal.connect(self._on_reset_finished)
+        self.worker.start()
+
+    def open_preferences(self):
+        """
+        @brief Open Preferences dialog for Pin Mapping and Smart Bypass configuration.
+        """
+        dialog = PreferencesDialog(
+            parent=self,
+            config=self.config,
+            current_driver=self._get_current_driver(),
+            current_port=self._get_current_port()
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.saved:
+            self.config = dialog.config
+            self._apply_smart_bypass_to_driver()
+            self.log(
+                f"[INFO] Settings updated: DTR={self.config.get('dtr_role')}, "
+                f"RTS={self.config.get('rts_role')}, "
+                f"SmartBypass={'ON' if self.config.get('smart_bypass') else 'OFF'}"
+            )
+            self._flash_footer("✓ Settings saved")
+
+    def _apply_smart_bypass_to_driver(self):
+        """
+        @brief Synchronize smart_bypass setting to active kernel module parameter.
+        """
+        driver = self._get_current_driver()
+        param_file = f"/sys/module/{driver}/parameters/smart_bypass"
+        if os.path.isfile(param_file):
+            val_str = "Y" if self.config.get("smart_bypass", True) else "N"
+            try:
+                with open(param_file, "w") as f:
+                    f.write(val_str)
+            except PermissionError:
+                try:
+                    subprocess.run(
+                        ["pkexec", "tee", param_file],
+                        input=val_str.encode(),
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
     def _on_reset_finished(self, success: bool, msg: str):
         """
