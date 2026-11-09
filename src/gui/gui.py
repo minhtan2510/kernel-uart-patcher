@@ -1892,9 +1892,10 @@ class UARTShieldApp(QWidget):
 
         # When running from source, prefer root binary if available, else scripts/run.sh
         root_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-        binary_path = os.path.join(root_dir, "Kernel UART Patcher")
-        if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
-            return f'"{binary_path}" --minimized'
+        for bin_name in ("Kernel_UART_Patcher", "Kernel UART Patcher"):
+            bin_candidate = os.path.join(root_dir, bin_name)
+            if os.path.isfile(bin_candidate) and os.access(bin_candidate, os.X_OK):
+                return f'"{bin_candidate}" --minimized'
 
         run_sh = os.path.join(root_dir, "scripts", "run.sh")
         if os.path.isfile(run_sh) and os.access(run_sh, os.X_OK):
