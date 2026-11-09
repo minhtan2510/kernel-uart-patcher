@@ -491,11 +491,41 @@ class PreferencesDialog(QDialog):
     def __init__(self, parent=None, config=None, current_driver="", current_port=""):
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.setFixedSize(440, 270)
+        self.setFixedSize(400, 260)
         self.config = dict(config or DEFAULT_CONFIG)
         self.current_driver = current_driver
         self.current_port = current_port
         self.saved = False
+
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f8fafc;
+            }
+            QComboBox {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                padding: 5px 10px;
+                padding-right: 28px;
+                font-size: 12px;
+                font-weight: bold;
+                color: #0f172a;
+            }
+            QComboBox:hover {
+                border: 1px solid #3b82f6;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                padding: 4px;
+                outline: 0px;
+                selection-background-color: transparent;
+            }
+        """)
 
         self._build_ui()
 
@@ -515,6 +545,7 @@ class PreferencesDialog(QDialog):
                 border-radius: 8px;
                 margin-top: 8px;
                 padding-top: 14px;
+                background-color: #ffffff;
             }
             QGroupBox::title {
                 subcontrol-origin: margin;
@@ -523,14 +554,17 @@ class PreferencesDialog(QDialog):
             }
         """)
         pin_layout = QFormLayout(grp_pins)
-        pin_layout.setContentsMargins(12, 10, 12, 10)
-        pin_layout.setSpacing(8)
+        pin_layout.setContentsMargins(14, 12, 14, 12)
+        pin_layout.setSpacing(10)
+        pin_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
 
-        self.cmb_dtr = QComboBox()
-        self.cmb_dtr.addItems(["Reset (NRST / EN)", "Boot Mode (GPIO0 / BOOT0)"])
+        self.cmb_dtr = PortComboBox(self)
+        self.cmb_dtr.setFixedWidth(110)
+        self.cmb_dtr.addItems(["Reset", "Boot"])
 
-        self.cmb_rts = QComboBox()
-        self.cmb_rts.addItems(["Boot Mode (GPIO0 / BOOT0)", "Reset (NRST / EN)"])
+        self.cmb_rts = PortComboBox(self)
+        self.cmb_rts.setFixedWidth(110)
+        self.cmb_rts.addItems(["Boot", "Reset"])
 
         # Set initial values
         if self.config.get("dtr_role") == "Boot":
@@ -552,7 +586,7 @@ class PreferencesDialog(QDialog):
         grp_startup = QGroupBox("System Startup")
         grp_startup.setStyleSheet(grp_pins.styleSheet())
         startup_layout = QVBoxLayout(grp_startup)
-        startup_layout.setContentsMargins(12, 10, 12, 10)
+        startup_layout.setContentsMargins(14, 12, 14, 12)
         startup_layout.setSpacing(4)
 
         self.chk_autostart = QCheckBox("Start Minimized on Boot")
@@ -588,7 +622,7 @@ class PreferencesDialog(QDialog):
         @param idx Selected index in DTR combo.
         """
         self.cmb_rts.blockSignals(True)
-        self.cmb_rts.setCurrentIndex(0 if idx == 0 else 1)
+        self.cmb_rts.setCurrentIndex(idx)
         self.cmb_rts.blockSignals(False)
 
     def _on_rts_changed(self, idx: int):
@@ -597,7 +631,7 @@ class PreferencesDialog(QDialog):
         @param idx Selected index in RTS combo.
         """
         self.cmb_dtr.blockSignals(True)
-        self.cmb_dtr.setCurrentIndex(0 if idx == 0 else 1)
+        self.cmb_dtr.setCurrentIndex(idx)
         self.cmb_dtr.blockSignals(False)
 
     def _save_and_accept(self):
