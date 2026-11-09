@@ -381,13 +381,13 @@ class CommandWorker(QThread):
 # ------------------------------------------------------------------------------
 class ResetWorker(QThread):
     """
-    @brief Asynchronous worker to pulse DTR/RTS lines for MCU hardware reset or bootloader entry.
+    @brief Asynchronous worker to pulse DTR/RTS lines for MCU hardware reset.
     """
     log_signal = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
 
     def __init__(self, port: str, driver: str, was_patch_active: bool,
-                 dtr_role: str = "Reset", rts_role: str = "Boot", mode: str = "reset"):
+                 dtr_role: str = "Reset", rts_role: str = "Boot"):
         """
         @brief Initialize reset worker.
         @param port Serial port device path (e.g. /dev/ttyUSB0).
@@ -395,7 +395,6 @@ class ResetWorker(QThread):
         @param was_patch_active Whether kernel driver reset shield was active.
         @param dtr_role Assigned function for DTR pin ('Reset' or 'Boot').
         @param rts_role Assigned function for RTS pin ('Boot' or 'Reset').
-        @param mode Operation mode: 'reset' (normal reboot) or 'bootloader' (enter ROM DFU).
         """
         super().__init__()
         self.port = port
@@ -403,7 +402,6 @@ class ResetWorker(QThread):
         self.was_patch_active = was_patch_active
         self.dtr_role = dtr_role
         self.rts_role = rts_role
-        self.mode = mode
 
     def _write_param(self, path: str, val: str):
         """
@@ -425,7 +423,7 @@ class ResetWorker(QThread):
 
     def _pulse_lines(self, port_path: str):
         """
-        @brief Pulse DTR and RTS modem control lines according to Pin Mapping and mode.
+        @brief Pulse Reset modem control line according to Pin Mapping.
         @param port_path TTY device path (e.g. /dev/ttyUSB0).
         """
         fd = os.open(port_path, os.O_RDWR | os.O_NONBLOCK | os.O_NOCTTY)
@@ -433,57 +431,41 @@ class ResetWorker(QThread):
             reset_bit = termios.TIOCM_DTR if self.dtr_role == "Reset" else termios.TIOCM_RTS
             boot_bit = termios.TIOCM_RTS if self.dtr_role == "Reset" else termios.TIOCM_DTR
 
-            if self.mode == "bootloader":
-                # Sequence to enter ROM Bootloader / Download Mode:
-                # 1. Assert Boot line (pull GPIO0/BOOT0 LOW)
-                fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", boot_bit))
-                time.sleep(0.05)
-                # 2. Assert Reset line (pull EN/NRST LOW)
-                fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", reset_bit))
-                time.sleep(0.12)
-                # 3. Release Reset line (EN/NRST goes HIGH, MCU starts with Boot=LOW)
-                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", reset_bit))
-                time.sleep(0.12)
-                # 4. Release Boot line (GPIO0/BOOT0 back to HIGH)
-                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", boot_bit))
-                time.sleep(0.05)
-            else:
-                # Normal Reboot (Run Mode):
-                # Ensure Boot line is INACTIVE (HIGH) while Reset is pulsed LOW
-                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", boot_bit))
-                time.sleep(0.02)
-                fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", reset_bit))
-                time.sleep(0.15)
-                fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", reset_bit))
-                time.sleep(0.05)
+            # Normal Reboot (Run Mode):
+            # Ensure Boot line is INACTIVE (HIGH) while Reset is pulsed LOW
+            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", boot_bit))
+            time.sleep(0.02)
+            fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", reset_bit))
+            time.sleep(0.15)
+            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", reset_bit))
+            time.sleep(0.05)
         finally:
             os.close(fd)
 
     def run(self):
         """
-        @brief Execute reset/bootloader sequence: temporarily unshield, pulse lines, and restore shield.
+        @brief Execute reset sequence: temporarily unshield, pulse lines, and restore shield.
         """
         param_file = f"/sys/module/{self.driver}/parameters/disable_dtr_rts" if self.driver else ""
         has_param = bool(param_file and os.path.isfile(param_file))
         success = False
-        action_name = "Bootloader entry" if self.mode == "bootloader" else "Hardware reset"
 
         try:
             if self.was_patch_active and has_param:
                 self.log_signal.emit(f"[RESET] Temporarily disarming reset shield on {self.driver}...")
                 self._write_param(param_file, "N")
 
-            self.log_signal.emit(f"[RESET] Pulsing {action_name} on {self.port} (DTR={self.dtr_role}, RTS={self.rts_role})...")
+            self.log_signal.emit(f"[RESET] Pulsing hardware reset on {self.port} (DTR={self.dtr_role}, RTS={self.rts_role})...")
             self._pulse_lines(self.port)
 
-            self.log_signal.emit(f"[SUCCESS] {action_name} triggered successfully on {self.port}.")
+            self.log_signal.emit(f"[SUCCESS] Hardware reset triggered successfully on {self.port}.")
             success = True
-            msg = f"{action_name} {self.port} OK"
+            msg = f"Hardware reset {self.port} OK"
 
         except Exception as e:
-            self.log_signal.emit(f"[ERROR] {action_name} failed: {e}")
+            self.log_signal.emit(f"[ERROR] Hardware reset failed: {e}")
             success = False
-            msg = f"{action_name} failed: {e}"
+            msg = f"Hardware reset failed: {e}"
 
         finally:
             if self.was_patch_active and has_param:
@@ -594,27 +576,6 @@ class PreferencesDialog(QDialog):
         # 3. Actions Row
         act_row = QHBoxLayout()
         act_row.setSpacing(8)
-
-        if self.parent() and hasattr(self.parent(), "trigger_bootloader"):
-            self.btn_bootloader = QPushButton("Enter Bootloader (DFU)")
-            self.btn_bootloader.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.btn_bootloader.setStyleSheet("""
-                QPushButton {
-                    background-color: #f1f5f9;
-                    color: #475569;
-                    border: 1px solid #cbd5e1;
-                    border-radius: 6px;
-                    padding: 5px 10px;
-                    font-size: 11px;
-                }
-                QPushButton:hover {
-                    background-color: #e2e8f0;
-                    color: #0f172a;
-                }
-            """)
-            self.btn_bootloader.clicked.connect(self._on_bootloader_clicked)
-            act_row.addWidget(self.btn_bootloader)
-
         act_row.addStretch()
 
         btn_cancel = QPushButton("Cancel")
@@ -646,15 +607,6 @@ class PreferencesDialog(QDialog):
         self.cmb_dtr.blockSignals(True)
         self.cmb_dtr.setCurrentIndex(0 if idx == 0 else 1)
         self.cmb_dtr.blockSignals(False)
-
-    def _on_bootloader_clicked(self):
-        """
-        @brief Trigger bootloader pulse using current uncommitted mapping.
-        """
-        dtr_role = "Reset" if self.cmb_dtr.currentIndex() == 0 else "Boot"
-        rts_role = "Boot" if self.cmb_rts.currentIndex() == 0 else "Reset"
-        if self.parent() and hasattr(self.parent(), "trigger_bootloader"):
-            self.parent().trigger_bootloader(dtr_role=dtr_role, rts_role=rts_role)
 
     def _save_and_accept(self):
         """
@@ -1750,14 +1702,10 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 3. Trigger Hardware Reset & Bootloader
+        # 3. Trigger Hardware Reset
         self.tray_act_reset = self.tray_menu.addAction("Trigger Hardware Reset")
         self.tray_act_reset.setEnabled(False)
         self.tray_act_reset.triggered.connect(self.trigger_reset)
-
-        self.tray_act_bootloader = self.tray_menu.addAction("Enter Bootloader Mode")
-        self.tray_act_bootloader.setEnabled(False)
-        self.tray_act_bootloader.triggered.connect(lambda: self.trigger_bootloader())
 
         self.tray_menu.addSeparator()
 
@@ -1839,13 +1787,9 @@ class UARTShieldApp(QWidget):
         if port and self.devices:
             self.tray_act_reset.setText(f"Trigger Reset ({port})")
             self.tray_act_reset.setEnabled(not self.is_operating)
-            self.tray_act_bootloader.setText(f"Enter Bootloader ({port})")
-            self.tray_act_bootloader.setEnabled(not self.is_operating)
         else:
             self.tray_act_reset.setText("Trigger Hardware Reset")
             self.tray_act_reset.setEnabled(False)
-            self.tray_act_bootloader.setText("Enter Bootloader Mode")
-            self.tray_act_bootloader.setEnabled(False)
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """
@@ -2160,43 +2104,7 @@ class UARTShieldApp(QWidget):
         self.set_operating(True, f"Resetting {port}")
         self.worker = ResetWorker(
             port, driver, was_patch_active,
-            dtr_role=dtr_role, rts_role=rts_role, mode="reset"
-        )
-        self.worker.log_signal.connect(self.log)
-        self.worker.finished_signal.connect(self._on_reset_finished)
-        self.worker.start()
-
-    def trigger_bootloader(self, dtr_role: str = None, rts_role: str = None):
-        """
-        @brief Trigger bootloader entry sequence using active Pin Mapping.
-        @param dtr_role Override DTR role if specified from settings preview.
-        @param rts_role Override RTS role if specified from settings preview.
-        """
-        if self.is_operating:
-            return
-
-        port = self._get_current_port()
-        driver = self._get_current_driver()
-        if not port or not os.path.exists(port):
-            self.log("[WARN] No valid serial port connected to trigger bootloader.")
-            return
-
-        dtr_role = dtr_role or self.config.get("dtr_role", "Reset")
-        rts_role = rts_role or self.config.get("rts_role", "Boot")
-
-        param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts" if driver else ""
-        was_patch_active = False
-        if param_file and os.path.isfile(param_file):
-            try:
-                with open(param_file, "r") as f:
-                    was_patch_active = f.read().strip() in ("Y", "1")
-            except Exception:
-                was_patch_active = self.current_protected
-
-        self.set_operating(True, f"Entering Bootloader on {port}")
-        self.worker = ResetWorker(
-            port, driver, was_patch_active,
-            dtr_role=dtr_role, rts_role=rts_role, mode="bootloader"
+            dtr_role=dtr_role, rts_role=rts_role
         )
         self.worker.log_signal.connect(self.log)
         self.worker.finished_signal.connect(self._on_reset_finished)
