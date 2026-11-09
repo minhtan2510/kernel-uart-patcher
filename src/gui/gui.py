@@ -488,8 +488,8 @@ class PreferencesDialog(QDialog):
     """
     def __init__(self, parent=None, config=None, current_driver="", current_port=""):
         super().__init__(parent)
-        self.setWindowTitle("Settings — Pin Mapping & Smart Flashing")
-        self.setFixedSize(460, 380)
+        self.setWindowTitle("Settings — Preferences & Pin Mapping")
+        self.setFixedSize(460, 420)
         self.config = dict(config or DEFAULT_CONFIG)
         self.current_driver = current_driver
         self.current_port = current_port
@@ -573,7 +573,24 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(grp_bypass)
 
-        # 3. Actions Row
+        # 3. System Startup Group
+        grp_startup = QGroupBox("System Startup")
+        grp_startup.setStyleSheet(grp_pins.styleSheet())
+        startup_layout = QVBoxLayout(grp_startup)
+        startup_layout.setContentsMargins(12, 10, 12, 10)
+        startup_layout.setSpacing(6)
+
+        self.chk_autostart = QCheckBox("Start Minimized on Boot")
+        initial_autostart = False
+        if self.parent() and hasattr(self.parent(), "_is_autostart_enabled"):
+            initial_autostart = self.parent()._is_autostart_enabled()
+        self.chk_autostart.setChecked(initial_autostart)
+        self.chk_autostart.setStyleSheet("font-weight: bold; font-size: 12px; color: #0f172a;")
+        startup_layout.addWidget(self.chk_autostart)
+
+        layout.addWidget(grp_startup)
+
+        # 4. Actions Row
         act_row = QHBoxLayout()
         act_row.setSpacing(8)
         act_row.addStretch()
@@ -615,6 +632,10 @@ class PreferencesDialog(QDialog):
         self.config["dtr_role"] = "Reset" if self.cmb_dtr.currentIndex() == 0 else "Boot"
         self.config["rts_role"] = "Boot" if self.cmb_rts.currentIndex() == 0 else "Reset"
         self.config["smart_bypass"] = self.chk_bypass.isChecked()
+        if self.parent() and hasattr(self.parent(), "_on_autostart_toggled"):
+            cur_autostart = self.parent()._is_autostart_enabled()
+            if self.chk_autostart.isChecked() != cur_autostart:
+                self.parent()._on_autostart_toggled(self.chk_autostart.isChecked())
         save_user_config(self.config)
         self.saved = True
         self.accept()
@@ -974,19 +995,10 @@ class UARTShieldApp(QWidget):
 
         self.btn_settings = QPushButton("⚙ Settings")
         self.btn_settings.setObjectName("btn_settings")
-        self.btn_settings.setToolTip("Hardware Pin Mapping (DTR/RTS) and Smart Flashing Bypass")
+        self.btn_settings.setToolTip("Hardware Pin Mapping (DTR/RTS) and Preferences (Ctrl+,)")
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_settings.clicked.connect(self.open_preferences)
         ftr.addWidget(self.btn_settings)
-
-        ftr.addSpacing(10)
-
-        self.chk_autostart = QCheckBox("Start on boot")
-        self.chk_autostart.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.chk_autostart.setStyleSheet("QCheckBox { color: #64748b; font-size: 11px; } QCheckBox:hover { color: #0f172a; }")
-        self.chk_autostart.setChecked(self._is_autostart_enabled())
-        self.chk_autostart.toggled.connect(self._on_autostart_toggled)
-        ftr.addWidget(self.chk_autostart)
 
         ftr.addSpacing(10)
 
