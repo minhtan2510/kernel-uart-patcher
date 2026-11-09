@@ -24,10 +24,10 @@ static bool disable_dtr_rts = true;
 module_param(disable_dtr_rts, bool, 0644);
 MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
 
-/* Added by uart_deep_patch: Smart sequence detection for flashing (Cải tiến 2) */
+/* Added by uart_deep_patch: Smart sequence detection for flashing */
 static bool smart_bypass = true;
 module_param(smart_bypass, bool, 0644);
-MODULE_PARM_DESC(smart_bypass, "Allow rapid multi-toggle flashing sequence while blocking single open (default: true)");
+MODULE_PARM_DESC(smart_bypass, "Allow rapid multi-toggle flashing sequence while blocking normal connect (default: true)");
 
 static int flash_detect_count = 0;
 module_param(flash_detect_count, int, 0444);
@@ -39,12 +39,14 @@ static int toggle_seq_count = 0;
 static inline bool is_flashing_sequence(void)
 {
 	unsigned long now = jiffies;
+
 	if (!smart_bypass)
 	{
 		return false;
 	}
 
-	if (time_after(now, last_toggle_jiffies + msecs_to_jiffies(600)))
+	/* Reset sequence if idle for more than 800ms */
+	if (time_after(now, last_toggle_jiffies + msecs_to_jiffies(800)))
 	{
 		toggle_seq_count = 1;
 		last_toggle_jiffies = now;
@@ -53,12 +55,19 @@ static inline bool is_flashing_sequence(void)
 
 	toggle_seq_count++;
 	last_toggle_jiffies = now;
-	if (toggle_seq_count == 2)
+
+	/*
+	 * Normal connect (open + termios setup) emits at most 1 to 2 modem control updates.
+	 * Flashing tools (esptool, stm32flash, etc.) issue 4 or more rapid toggles across
+	 * DTR/RTS within <800ms to drive bootloader pins into download mode.
+	 */
+	if (toggle_seq_count == 4)
 	{
 		flash_detect_count++;
 		pr_info("kernel-uart-patcher: Firmware flashing sequence detected (count: %d)! Temporarily bypassing DTR/RTS suppression\\n", flash_detect_count);
 	}
-	return (toggle_seq_count >= 2);
+
+	return (toggle_seq_count >= 4);
 }
 """
 
