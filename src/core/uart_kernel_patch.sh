@@ -240,12 +240,14 @@ check_deps()
         missing+=("build-essential")
     fi
 
-    # Kernel compiler check: verify if kernel headers specifically require gcc-12 or similar
+    # Kernel compiler check: verify if compiler is available
     local req_gcc
     req_gcc=$(grep -oP '^CC\s*=\s*\$\(CROSS_COMPILE\)\K(gcc-\d+)' "/lib/modules/${KVER}/build/Makefile" 2>/dev/null || echo "")
     if [ -n "$req_gcc" ]; then
         if ! command -v "$req_gcc" &>/dev/null && ! command -v "x86_64-linux-gnu-${req_gcc}" &>/dev/null; then
-            missing+=("$req_gcc")
+            if ! command -v gcc &>/dev/null; then
+                missing+=("$req_gcc")
+            fi
         fi
     fi
 
@@ -382,17 +384,32 @@ build_module()
 
     local build_log="$WORK_DIR/build.log"
 
-    # Explicitly resolve compiler binary to guarantee make never fails under sanitized PATHs
-    local make_cmd=(make -C "$kdir" M="$build_dir" modules)
+    # Prepare compiler shims and resolve compiler binary
+    local req_gcc
+    req_gcc=$(grep -oP '^CC\s*=\s*\$\(CROSS_COMPILE\)\K(gcc-\d+)' "$kdir/Makefile" 2>/dev/null || echo "")
+
     local cc_bin=""
-    if command -v gcc-12 &>/dev/null; then
-        cc_bin=$(command -v gcc-12)
-    elif command -v x86_64-linux-gnu-gcc-12 &>/dev/null; then
-        cc_bin=$(command -v x86_64-linux-gnu-gcc-12)
+    if [ -n "$req_gcc" ] && command -v "$req_gcc" &>/dev/null; then
+        cc_bin=$(command -v "$req_gcc")
+    elif [ -n "$req_gcc" ] && command -v "x86_64-linux-gnu-${req_gcc}" &>/dev/null; then
+        cc_bin=$(command -v "x86_64-linux-gnu-${req_gcc}")
     elif command -v gcc &>/dev/null; then
         cc_bin=$(command -v gcc)
+    elif command -v clang &>/dev/null; then
+        cc_bin=$(command -v clang)
     fi
 
+    # Create temporary compiler shim directory if kernel Makefile hardcodes a missing gcc binary
+    if [ -n "$req_gcc" ] && [ -n "$cc_bin" ] && ! command -v "$req_gcc" &>/dev/null; then
+        local shim_dir="$WORK_DIR/shims"
+        mkdir -p "$shim_dir"
+        ln -sf "$cc_bin" "$shim_dir/$req_gcc"
+        ln -sf "$cc_bin" "$shim_dir/x86_64-linux-gnu-$req_gcc"
+        export PATH="$shim_dir:$PATH"
+        detail "Created compiler shim: $req_gcc -> $cc_bin"
+    fi
+
+    local make_cmd=(make -C "$kdir" M="$build_dir" modules)
     if [ -n "$cc_bin" ]; then
         make_cmd+=(CC="$cc_bin" HOSTCC="$cc_bin")
     fi
