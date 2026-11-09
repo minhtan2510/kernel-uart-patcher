@@ -1674,6 +1674,27 @@ class UARTShieldApp(QWidget):
         painter.end()
         return QIcon(pixmap)
 
+    def _make_badge_icon(self, color_hex: str) -> QIcon:
+        """
+        @brief Render a vibrant circular status badge icon for tray menu item.
+        @param color_hex CSS hex color (e.g. COLOR_EMERALD, COLOR_AMBER).
+        @return QIcon instance with anti-aliased status dot.
+        """
+        scale = 2.0
+        logical_size = 12
+        pixmap = QPixmap(int(logical_size * scale), int(logical_size * scale))
+        pixmap.setDevicePixelRatio(scale)
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QBrush(QColor(color_hex)))
+        painter.setPen(QPen(QColor("#ffffff"), 1.0))
+        painter.drawEllipse(QRectF(1.0, 1.0, 10.0, 10.0))
+        painter.end()
+
+        return QIcon(pixmap)
+
     def _setup_tray(self):
         """
         @brief Initialize system tray icon, context menu, and desktop integration.
@@ -1743,28 +1764,32 @@ class UARTShieldApp(QWidget):
 
         if not self.devices:
             state = "none"
-            label = "No Device Connected"
+            label = "⚪ No Device Connected"
             tooltip = "Kernel UART Patcher — No device"
             toggle_checked = False
             toggle_enabled = False
+            badge_color = "#94a3b8"
         elif not self.current_param_exists:
             state = "default"
-            label = f"{port} ({driver}) • SYSTEM DEFAULT"
+            label = f"{port} ({driver}) • ⚪ SYSTEM DEFAULT"
             tooltip = f"Kernel UART Patcher\n{port} ({driver}) — SYSTEM DEFAULT (unpatched)"
             toggle_checked = False
             toggle_enabled = False
+            badge_color = "#94a3b8"
         elif self.current_protected:
             state = "active"
-            label = f"{port} ({driver}) • PATCH ACTIVE"
+            label = f"{port} ({driver}) • 🟢 PATCH ACTIVE"
             tooltip = f"Kernel UART Patcher\n{port} ({driver}) — PATCH ACTIVE ✓ (Resets blocked)"
             toggle_checked = True
             toggle_enabled = True
+            badge_color = COLOR_EMERALD
         else:
             state = "inactive"
-            label = f"{port} ({driver}) • PATCH INACTIVE"
+            label = f"{port} ({driver}) • 🟠 PATCH INACTIVE"
             tooltip = f"Kernel UART Patcher\n{port} ({driver}) — PATCH INACTIVE (DTR asserts on connect)"
             toggle_checked = False
             toggle_enabled = True
+            badge_color = COLOR_AMBER
 
         if state != self._tray_last_state:
             cached_icon = self._tray_icons.get(state)
@@ -1776,6 +1801,7 @@ class UARTShieldApp(QWidget):
 
         self.tray.setToolTip(tooltip)
         self.tray_act_device.setText(label)
+        self.tray_act_device.setIcon(self._make_badge_icon(badge_color))
         self.tray_act_toggle.setChecked(toggle_checked)
         self.tray_act_toggle.setEnabled(toggle_enabled and not self.is_operating)
 
