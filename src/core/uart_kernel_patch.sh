@@ -34,6 +34,9 @@
 
 set -euo pipefail
 
+# Ensure standard system binary paths are always present in sanitized subshells (pkexec/cron/etc.)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT_NAME=$(basename "$0")
 BACKUP_DIR="/var/backups/uart_dtr_patch"
@@ -237,6 +240,15 @@ check_deps()
         missing+=("build-essential")
     fi
 
+    # Kernel compiler check: verify if kernel headers specifically require gcc-12 or similar
+    local req_gcc
+    req_gcc=$(grep -oP '^CC\s*=\s*\$\(CROSS_COMPILE\)\K(gcc-\d+)' "/lib/modules/${KVER}/build/Makefile" 2>/dev/null || echo "")
+    if [ -n "$req_gcc" ]; then
+        if ! command -v "$req_gcc" &>/dev/null && ! command -v "x86_64-linux-gnu-${req_gcc}" &>/dev/null; then
+            missing+=("$req_gcc")
+        fi
+    fi
+
     # Curl
     if ! command -v curl &>/dev/null; then
         missing+=("curl")
@@ -370,7 +382,22 @@ build_module()
 
     local build_log="$WORK_DIR/build.log"
 
-    if ! make -C "$kdir" M="$build_dir" modules > "$build_log" 2>&1; then
+    # Explicitly resolve compiler binary to guarantee make never fails under sanitized PATHs
+    local make_cmd=(make -C "$kdir" M="$build_dir" modules)
+    local cc_bin=""
+    if command -v gcc-12 &>/dev/null; then
+        cc_bin=$(command -v gcc-12)
+    elif command -v x86_64-linux-gnu-gcc-12 &>/dev/null; then
+        cc_bin=$(command -v x86_64-linux-gnu-gcc-12)
+    elif command -v gcc &>/dev/null; then
+        cc_bin=$(command -v gcc)
+    fi
+
+    if [ -n "$cc_bin" ]; then
+        make_cmd+=(CC="$cc_bin" HOSTCC="$cc_bin")
+    fi
+
+    if ! "${make_cmd[@]}" > "$build_log" 2>&1; then
         err "Build failed. Last 20 lines of build log:"
         echo ""
         tail -20 "$build_log" >&2
