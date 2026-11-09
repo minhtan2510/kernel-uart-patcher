@@ -1695,13 +1695,22 @@ class UARTShieldApp(QWidget):
         # Context Menu
         self.tray_menu = QMenu()
 
-        # 1. Informational header (current device & mode)
+        # 1. Primary action: Restore main window (Standard Linux Tray convention)
+        act_open = self.tray_menu.addAction("Open Control Panel")
+        font_bold = act_open.font()
+        font_bold.setBold(True)
+        act_open.setFont(font_bold)
+        act_open.triggered.connect(self._show_window)
+
+        self.tray_menu.addSeparator()
+
+        # 2. Informational header (current device & mode)
         self.tray_act_device = self.tray_menu.addAction("No device connected")
         self.tray_act_device.setEnabled(False)
 
         self.tray_menu.addSeparator()
 
-        # 2. Checkable quick toggle
+        # 3. Checkable quick toggle
         self.tray_act_toggle = self.tray_menu.addAction("Block Reset Pins (Patch Active)")
         self.tray_act_toggle.setCheckable(True)
         self.tray_act_toggle.setEnabled(False)
@@ -1709,14 +1718,14 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 3. Trigger Hardware Reset
+        # 4. Trigger Hardware Reset
         self.tray_act_reset = self.tray_menu.addAction("Trigger Hardware Reset")
         self.tray_act_reset.setEnabled(False)
         self.tray_act_reset.triggered.connect(self.trigger_reset)
 
         self.tray_menu.addSeparator()
 
-        # 4. Autostart
+        # 5. Autostart
         self.tray_act_autostart = self.tray_menu.addAction("Start Minimized on Boot")
         self.tray_act_autostart.setCheckable(True)
         self.tray_act_autostart.setChecked(self._is_autostart_enabled())
@@ -1724,11 +1733,7 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 5. Restore main window
-        act_open = self.tray_menu.addAction("Open Control Panel")
-        act_open.triggered.connect(self._show_window)
-
-        # 5. Terminate app completely
+        # 6. Terminate app completely
         act_quit = self.tray_menu.addAction("Quit")
         act_quit.triggered.connect(self._quit_app)
 
@@ -1797,20 +1802,13 @@ class UARTShieldApp(QWidget):
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """
-        @brief Handle user click on tray icon. Double-click opens the main window.
+        @brief Handle user click on tray icon.
         @param reason Click reason enum.
         """
-        now = time.time()
-        is_double_click = (
-            reason == QSystemTrayIcon.ActivationReason.DoubleClick
-            or (
-                reason == QSystemTrayIcon.ActivationReason.Trigger
-                and (now - getattr(self, "_last_tray_click_time", 0.0)) < 0.45
-            )
-        )
-        self._last_tray_click_time = now
-
-        if is_double_click:
+        if reason in (
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        ):
             self._show_window()
 
     def _on_tray_toggle(self, checked: bool):
@@ -1928,9 +1926,10 @@ class UARTShieldApp(QWidget):
         @brief Restore, focus, and raise the main application window.
         """
         self.refresh_timer.setInterval(3000)
-        self.showNormal()
-        self.activateWindow()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.show()
         self.raise_()
+        self.activateWindow()
         self.refresh_devices()
 
     def _quit_app(self):
