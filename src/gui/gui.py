@@ -488,8 +488,8 @@ class PreferencesDialog(QDialog):
     """
     def __init__(self, parent=None, config=None, current_driver="", current_port=""):
         super().__init__(parent)
-        self.setWindowTitle("Settings — Preferences & Pin Mapping")
-        self.setFixedSize(460, 420)
+        self.setWindowTitle("Settings")
+        self.setFixedSize(440, 360)
         self.config = dict(config or DEFAULT_CONFIG)
         self.current_driver = current_driver
         self.current_port = current_port
@@ -503,7 +503,7 @@ class PreferencesDialog(QDialog):
         layout.setSpacing(12)
 
         # 1. Hardware Pin Mapping Group
-        grp_pins = QGroupBox("Hardware Pin Role Mapping")
+        grp_pins = QGroupBox("Hardware Pin Mapping")
         grp_pins.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -522,12 +522,7 @@ class PreferencesDialog(QDialog):
         """)
         pin_layout = QFormLayout(grp_pins)
         pin_layout.setContentsMargins(12, 10, 12, 10)
-        pin_layout.setSpacing(10)
-
-        lbl_desc = QLabel("Assign serial modem control lines to target MCU Reset (EN) and Boot (GPIO0) pins:")
-        lbl_desc.setWordWrap(True)
-        lbl_desc.setStyleSheet("color: #475569; font-size: 11px; font-weight: normal;")
-        pin_layout.addRow(lbl_desc)
+        pin_layout.setSpacing(8)
 
         self.cmb_dtr = QComboBox()
         self.cmb_dtr.addItems(["Reset (NRST / EN)", "Boot Mode (GPIO0 / BOOT0)"])
@@ -552,23 +547,22 @@ class PreferencesDialog(QDialog):
         layout.addWidget(grp_pins)
 
         # 2. Smart Flashing Bypass Group
-        grp_bypass = QGroupBox("Smart Flashing Bypass (Cải tiến 2)")
+        grp_bypass = QGroupBox("Smart Flashing Bypass")
         grp_bypass.setStyleSheet(grp_pins.styleSheet())
         bypass_layout = QVBoxLayout(grp_bypass)
         bypass_layout.setContentsMargins(12, 10, 12, 10)
-        bypass_layout.setSpacing(6)
+        bypass_layout.setSpacing(4)
 
-        self.chk_bypass = QCheckBox("Enable Smart Flashing Bypass (Sequence Pattern)")
+        self.chk_bypass = QCheckBox("Enable Smart Flashing Bypass")
         self.chk_bypass.setChecked(self.config.get("smart_bypass", True))
         self.chk_bypass.setStyleSheet("font-weight: bold; font-size: 12px; color: #0f172a;")
         bypass_layout.addWidget(self.chk_bypass)
 
         lbl_bypass_desc = QLabel(
-            "• Single open() events (gTune, MissionPlanner, monitors) are 100% blocked from resetting the MCU.\n"
-            "• Rapid toggle sequences (esptool, avrdude, stm32flash) are automatically permitted for flashing."
+            "Permit flashing tools (esptool, avrdude) while blocking normal serial connection resets."
         )
         lbl_bypass_desc.setWordWrap(True)
-        lbl_bypass_desc.setStyleSheet("color: #475569; font-size: 11px;")
+        lbl_bypass_desc.setStyleSheet("color: #64748b; font-size: 11px;")
         bypass_layout.addWidget(lbl_bypass_desc)
 
         layout.addWidget(grp_bypass)
@@ -578,7 +572,7 @@ class PreferencesDialog(QDialog):
         grp_startup.setStyleSheet(grp_pins.styleSheet())
         startup_layout = QVBoxLayout(grp_startup)
         startup_layout.setContentsMargins(12, 10, 12, 10)
-        startup_layout.setSpacing(6)
+        startup_layout.setSpacing(4)
 
         self.chk_autostart = QCheckBox("Start Minimized on Boot")
         initial_autostart = False
