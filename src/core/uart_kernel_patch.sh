@@ -581,7 +581,7 @@ install_module()
     # Verify that the new module is genuinely active in kernel RAM
     if [ -f "/sys/module/${MODULE}/parameters/disable_dtr_rts" ]; then
         detail "CONFIRMED: Deep Patch is ACTIVE in running kernel memory!"
-        chmod 0666 "/sys/module/${MODULE}/parameters/disable_dtr_rts" "/sys/module/${MODULE}/parameters/smart_bypass" 2>/dev/null || true
+        chmod 0666 "/sys/module/${MODULE}/parameters/disable_dtr_rts" 2>/dev/null || true
     else
         err "Verification failed: /sys/module/${MODULE}/parameters/disable_dtr_rts was not found."
         err "The patched module could not be activated in kernel memory."
@@ -592,8 +592,8 @@ install_module()
     local udev_file="/etc/udev/rules.d/99-kernel-uart-patcher.rules"
     cat << 'EOF' > "$udev_file"
 # Kernel UART Patcher: allow userspace to toggle DTR/RTS protection without root password
-ACTION=="add", SUBSYSTEM=="module", KERNEL=="cp210x|ch341|ftdi_sio|pl2303|cdc_acm", RUN+="/bin/sh -c 'chmod 0666 /sys/module/%k/parameters/disable_dtr_rts /sys/module/%k/parameters/smart_bypass 2>/dev/null || true'"
-ACTION=="add", SUBSYSTEM=="tty", KERNEL=="ttyUSB*|ttyACM*", RUN+="/bin/sh -c 'chmod 0666 /sys/module/*/parameters/disable_dtr_rts /sys/module/*/parameters/smart_bypass 2>/dev/null || true'"
+ACTION=="add", SUBSYSTEM=="module", KERNEL=="cp210x|ch341|ftdi_sio|pl2303|cdc_acm", RUN+="/bin/sh -c 'chmod 0666 /sys/module/%k/parameters/disable_dtr_rts 2>/dev/null || true'"
+ACTION=="add", SUBSYSTEM=="tty", KERNEL=="ttyUSB*|ttyACM*", RUN+="/bin/sh -c 'chmod 0666 /sys/module/*/parameters/disable_dtr_rts 2>/dev/null || true'"
 EOF
     udevadm control --reload-rules 2>/dev/null || true
 
@@ -817,37 +817,6 @@ cmd_toggle()
     esac
 }
 
-cmd_smart_bypass()
-{
-    local val="${1:-}"
-    if [ -z "$val" ]; then
-        die "Usage: sudo ./$SCRIPT_NAME smart-bypass <module> <0|1|on|off>"
-    fi
-
-    local param_path="/sys/module/${MODULE}/parameters/smart_bypass"
-
-    if [ ! -f "$param_path" ]; then
-        die "Module $MODULE does not have parameter smart_bypass." \
-            "\n         You must re-patch the driver first."
-    fi
-
-    case "$val" in
-        1|on|true|yes|enable)
-            echo "Y" > "$param_path"
-            chmod 0666 "$param_path" 2>/dev/null || true
-            echo -e "[SUCCESS] SMART BYPASS ACTIVE set via sysfs."
-            ;;
-        0|off|false|no|disable)
-            echo "N" > "$param_path"
-            chmod 0666 "$param_path" 2>/dev/null || true
-            echo -e "[SUCCESS] SMART BYPASS INACTIVE set via sysfs."
-            ;;
-        *)
-            die "Invalid smart-bypass value: $val (use 1/on or 0/off)"
-            ;;
-    esac
-}
-
 cmd_status()
 {
     echo -e "\n${BOLD}=== UART Kernel Module Status ===${NC}\n"
@@ -881,26 +850,6 @@ cmd_status()
                     param_info=" ${GREEN}(DEEP PATCHED: disable_dtr_rts = ON)${NC}"
                 else
                     param_info=" ${YELLOW}(DEEP PATCHED: disable_dtr_rts = OFF)${NC}"
-                fi
-
-                local sfile="/sys/module/${mod}/parameters/smart_bypass"
-                if [ -f "$sfile" ]; then
-                    local sval
-                    sval=$(cat "$sfile" 2>/dev/null || echo "")
-                    if [ "$sval" = "Y" ] || [ "$sval" = "1" ]; then
-                        param_info="${param_info} ${CYAN}[smart_bypass: ON]${NC}"
-                    else
-                        param_info="${param_info} ${YELLOW}[smart_bypass: OFF]${NC}"
-                    fi
-                fi
-
-                local fcfile="/sys/module/${mod}/parameters/flash_detect_count"
-                if [ -f "$fcfile" ]; then
-                    local fcval
-                    fcval=$(cat "$fcfile" 2>/dev/null || echo "0")
-                    if [ "$fcval" -gt 0 ] 2>/dev/null; then
-                        param_info="${param_info} ${GREEN}[flashes_detected: ${fcval}]${NC}"
-                    fi
                 fi
             elif [ -f "$BACKUP_DIR/${mod}.kver" ]; then
                 param_info=" ${YELLOW}(backup exists)${NC}"
@@ -1013,12 +962,6 @@ main()
             [ "$(id -u)" -ne 0 ] && die "Must run as root. Use: sudo ./$SCRIPT_NAME toggle $target $extra_arg"
             resolve_module "$target"
             cmd_toggle "$extra_arg"
-            ;;
-        smart-bypass|smart_bypass)
-            [ -z "$target" ] || [ -z "$extra_arg" ] && { usage; die "Usage: sudo ./$SCRIPT_NAME smart-bypass <module> <1|0>"; }
-            [ "$(id -u)" -ne 0 ] && die "Must run as root. Use: sudo ./$SCRIPT_NAME smart-bypass $target $extra_arg"
-            resolve_module "$target"
-            cmd_smart_bypass "$extra_arg"
             ;;
         status)
             cmd_status

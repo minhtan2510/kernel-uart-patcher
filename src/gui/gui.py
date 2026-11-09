@@ -77,7 +77,6 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 DEFAULT_CONFIG = {
     "dtr_role": "Reset",
     "rts_role": "Boot",
-    "smart_bypass": True,
 }
 
 
@@ -492,7 +491,7 @@ class PreferencesDialog(QDialog):
     def __init__(self, parent=None, config=None, current_driver="", current_port=""):
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.setFixedSize(440, 360)
+        self.setFixedSize(440, 270)
         self.config = dict(config or DEFAULT_CONFIG)
         self.current_driver = current_driver
         self.current_port = current_port
@@ -549,28 +548,7 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(grp_pins)
 
-        # 2. Smart Flashing Bypass Group
-        grp_bypass = QGroupBox("Smart Flashing Bypass")
-        grp_bypass.setStyleSheet(grp_pins.styleSheet())
-        bypass_layout = QVBoxLayout(grp_bypass)
-        bypass_layout.setContentsMargins(12, 10, 12, 10)
-        bypass_layout.setSpacing(4)
-
-        self.chk_bypass = QCheckBox("Enable Smart Flashing Bypass")
-        self.chk_bypass.setChecked(self.config.get("smart_bypass", True))
-        self.chk_bypass.setStyleSheet("font-weight: bold; font-size: 12px; color: #0f172a;")
-        bypass_layout.addWidget(self.chk_bypass)
-
-        lbl_bypass_desc = QLabel(
-            "Permit flashing tools (esptool, avrdude) while blocking normal serial connection resets."
-        )
-        lbl_bypass_desc.setWordWrap(True)
-        lbl_bypass_desc.setStyleSheet("color: #64748b; font-size: 11px;")
-        bypass_layout.addWidget(lbl_bypass_desc)
-
-        layout.addWidget(grp_bypass)
-
-        # 3. System Startup Group
+        # 2. System Startup Group
         grp_startup = QGroupBox("System Startup")
         grp_startup.setStyleSheet(grp_pins.styleSheet())
         startup_layout = QVBoxLayout(grp_startup)
@@ -587,7 +565,7 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(grp_startup)
 
-        # 4. Actions Row
+        # 3. Actions Row
         act_row = QHBoxLayout()
         act_row.setSpacing(8)
         act_row.addStretch()
@@ -628,7 +606,6 @@ class PreferencesDialog(QDialog):
         """
         self.config["dtr_role"] = "Reset" if self.cmb_dtr.currentIndex() == 0 else "Boot"
         self.config["rts_role"] = "Boot" if self.cmb_rts.currentIndex() == 0 else "Reset"
-        self.config["smart_bypass"] = self.chk_bypass.isChecked()
         if self.parent() and hasattr(self.parent(), "_on_autostart_toggled"):
             cur_autostart = self.parent()._is_autostart_enabled()
             if self.chk_autostart.isChecked() != cur_autostart:
@@ -667,7 +644,6 @@ class UARTShieldApp(QWidget):
         self.tray = None
         self._tray_icons = {}
         self.config = load_user_config()
-        self._last_flash_detect_count = {}
         self._last_tray_click_time = 0.0
 
         self._setup_window()
@@ -684,7 +660,6 @@ class UARTShieldApp(QWidget):
 
         # Initial device scan first, then initialize tray with accurate state
         self.refresh_devices()
-        self._apply_smart_bypass_to_driver()
         self._setup_tray()
 
         if self.start_minimized:
@@ -1414,22 +1389,6 @@ class UARTShieldApp(QWidget):
         if os.path.isfile(param_file):
             self.current_param_exists = True
             try:
-                # Check flash detect count for debugging
-                fcfile = f"/sys/module/{driver}/parameters/flash_detect_count"
-                if os.path.isfile(fcfile):
-                    try:
-                        with open(fcfile, "r") as f:
-                            cnt = int(f.read().strip())
-                        last_cnt = self._last_flash_detect_count.get(driver, 0)
-                        if cnt > last_cnt:
-                            self._last_flash_detect_count[driver] = cnt
-                            self.log(
-                                f"[FLASH] Firmware flashing detected on {driver} ({port})! "
-                                f"Bypassed DTR/RTS suppression (total: {cnt})."
-                            )
-                    except Exception:
-                        pass
-
                 with open(param_file, "r") as f:
                     val = f.read().strip()
                 if val in ("Y", "1"):
@@ -2122,38 +2081,11 @@ class UARTShieldApp(QWidget):
         )
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.saved:
             self.config = dialog.config
-            self._apply_smart_bypass_to_driver()
             self.log(
                 f"[INFO] Settings updated: DTR={self.config.get('dtr_role')}, "
-                f"RTS={self.config.get('rts_role')}, "
-                f"SmartBypass={'ON' if self.config.get('smart_bypass') else 'OFF'}"
+                f"RTS={self.config.get('rts_role')}"
             )
             self._flash_footer("✓ Settings saved")
-
-    def _apply_smart_bypass_to_driver(self):
-        """
-        @brief Synchronize smart_bypass setting to active kernel module parameter.
-        """
-        driver = self._get_current_driver()
-        param_file = f"/sys/module/{driver}/parameters/smart_bypass"
-        if os.path.isfile(param_file):
-            val_str = "Y" if self.config.get("smart_bypass", True) else "N"
-            try:
-                with open(param_file, "w") as f:
-                    f.write(val_str)
-            except PermissionError:
-                try:
-                    subprocess.run(
-                        ["pkexec", "tee", param_file],
-                        input=val_str.encode(),
-                        check=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL
-                    )
-                except Exception:
-                    pass
-            except Exception:
-                pass
 
     def _on_reset_finished(self, success: bool, msg: str):
         """
