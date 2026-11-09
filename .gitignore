@@ -26,6 +26,7 @@ dist/
 release/
 *.spec
 /Kernel UART Patcher
+/Kernel_UART_Patcher
 
 # IDE configurations
 .vscode/

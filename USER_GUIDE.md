@@ -6,9 +6,9 @@ A tool to block unwanted hardware resets when opening serial ports on Linux.
 
 ## 1. Launch
 
-Double-click `Kernel UART Patcher` or run in terminal:
+Double-click `Kernel_UART_Patcher` or run in terminal:
 ```bash
-./"Kernel UART Patcher"
+./Kernel_UART_Patcher
 ```
 *(Requires Secure Boot disabled in BIOS).*
 

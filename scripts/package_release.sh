@@ -18,7 +18,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT_DIR"
 
-APP_NAME="Kernel UART Patcher"
+APP_NAME="Kernel_UART_Patcher"
 GUIDE_FILE="USER_GUIDE.md"
 RELEASE_DIR="$ROOT_DIR/release"
 

@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT_DIR"
 
-OUTPUT_NAME="Kernel UART Patcher"
+OUTPUT_NAME="Kernel_UART_Patcher"
 
 echo "======================================================================"
 echo " Packaging: $OUTPUT_NAME (Standalone ELF Binary)"
@@ -72,7 +72,7 @@ if [ -f "$TARGET_BINARY" ]; then
     echo "    - Size:   $FILE_SIZE"
     echo "======================================================================"
     echo "You can now run it directly by double-clicking or executing:"
-    echo "    ./\"$OUTPUT_NAME\""
+    echo "    ./$OUTPUT_NAME"
 else
     echo "[-] Error: Build failed, binary not found in dist/"
     exit 1
