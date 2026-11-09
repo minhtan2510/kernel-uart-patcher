@@ -544,21 +544,22 @@ class UARTShieldApp(QWidget):
             }
             QPushButton#btn_reset {
                 background-color: #ffffff;
-                color: #d97706;
-                border: 1px solid #fcd34d;
-                border-radius: 8px;
-                padding: 6px 12px;
-                font-size: 12px;
-                font-weight: bold;
+                color: #64748b;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                padding: 2px 8px;
+                font-size: 11px;
+                font-weight: 500;
             }
             QPushButton#btn_reset:hover {
-                background-color: #fffbeb;
-                border: 1px solid #b45309;
+                background-color: #f1f5f9;
+                color: #0f172a;
+                border: 1px solid #94a3b8;
             }
             QPushButton#btn_reset:disabled {
-                color: #94a3b8;
-                border: 1px solid #e2e8f0;
-                background-color: #f8fafc;
+                color: #cbd5e1;
+                border: 1px solid #f1f5f9;
+                background-color: transparent;
             }
             QPushButton#btn_patch {
                 background-color: #2563eb;
@@ -674,13 +675,6 @@ class UARTShieldApp(QWidget):
         self.combo_ports.doubleClicked.connect(self._copy_port_to_clipboard)
         port_row.addWidget(self.combo_ports, stretch=1)
 
-        self.btn_reset = QPushButton("⚡ Reset")
-        self.btn_reset.setObjectName("btn_reset")
-        self.btn_reset.setToolTip("Pulse DTR/RTS lines to trigger hardware reset on target MCU/Gimbal (Ctrl+T)")
-        self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_reset.clicked.connect(self.trigger_reset)
-        port_row.addWidget(self.btn_reset)
-
         self.btn_scan = QPushButton("↻ Scan")
         self.btn_scan.setObjectName("btn_scan")
         self.btn_scan.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -755,12 +749,21 @@ class UARTShieldApp(QWidget):
         self.txt_log.setMaximumBlockCount(1000)
         root_layout.addWidget(self.txt_log)
 
-        # 6. Footer Row (Status / Spinner + Autostart + Clear Button)
+        # 6. Footer Row (Status / Spinner + Reset Device + Autostart + Clear Button)
         ftr = QHBoxLayout()
         self.lbl_footer = QLabel("Ready • Space to toggle")
         self.lbl_footer.setStyleSheet("color: #94a3b8; font-size: 11px;")
         ftr.addWidget(self.lbl_footer)
         ftr.addStretch()
+
+        self.btn_reset = QPushButton("Reset Device")
+        self.btn_reset.setObjectName("btn_reset")
+        self.btn_reset.setToolTip("Pulse DTR/RTS lines to trigger hardware reset on target MCU (Ctrl+T)")
+        self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset.clicked.connect(self.trigger_reset)
+        ftr.addWidget(self.btn_reset)
+
+        ftr.addSpacing(10)
 
         self.chk_autostart = QCheckBox("Start on boot")
         self.chk_autostart.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -922,8 +925,8 @@ class UARTShieldApp(QWidget):
         # 10b. Step Hardware Reset
         if re.match(r"^\[RESET\]", body):
             return (
-                f"{indent_prefix}<span style=\"color: #d97706; font-weight: bold;\">"
-                f"⚡ {escaped_body}</span>"
+                f"{indent_prefix}<span style=\"color: #64748b; font-weight: bold;\">"
+                f"↺ {escaped_body}</span>"
             )
 
         # 11. Standard info / compiler chatter
@@ -1458,7 +1461,7 @@ class UARTShieldApp(QWidget):
         self.tray_act_toggle.triggered.connect(self._on_tray_toggle)
 
         # 3. Trigger Hardware Reset
-        self.tray_act_reset = self.tray_menu.addAction("⚡ Trigger Hardware Reset")
+        self.tray_act_reset = self.tray_menu.addAction("Trigger Hardware Reset")
         self.tray_act_reset.setEnabled(False)
         self.tray_act_reset.triggered.connect(self.trigger_reset)
 
@@ -1537,10 +1540,10 @@ class UARTShieldApp(QWidget):
         self.tray_act_toggle.setEnabled(toggle_enabled and not self.is_operating)
 
         if port and self.devices:
-            self.tray_act_reset.setText(f"⚡ Trigger Reset ({port})")
+            self.tray_act_reset.setText(f"Trigger Reset ({port})")
             self.tray_act_reset.setEnabled(not self.is_operating)
         else:
-            self.tray_act_reset.setText("⚡ Trigger Hardware Reset")
+            self.tray_act_reset.setText("Trigger Hardware Reset")
             self.tray_act_reset.setEnabled(False)
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
