@@ -849,6 +849,15 @@ cmd_status()
                         param_info="${param_info} ${YELLOW}[smart_bypass: OFF]${NC}"
                     fi
                 fi
+
+                local fcfile="/sys/module/${mod}/parameters/flash_detect_count"
+                if [ -f "$fcfile" ]; then
+                    local fcval
+                    fcval=$(cat "$fcfile" 2>/dev/null || echo "0")
+                    if [ "$fcval" -gt 0 ] 2>/dev/null; then
+                        param_info="${param_info} ${GREEN}[flashes_detected: ${fcval}]${NC}"
+                    fi
+                fi
             elif [ -f "$BACKUP_DIR/${mod}.kver" ]; then
                 param_info=" ${YELLOW}(backup exists)${NC}"
             fi

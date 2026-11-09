@@ -17,6 +17,7 @@ import re
 
 SMART_BYPASS_HEADER = """
 #include <linux/jiffies.h>
+#include <linux/printk.h>
 
 /* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
 static bool disable_dtr_rts = true;
@@ -28,6 +29,10 @@ static bool smart_bypass = true;
 module_param(smart_bypass, bool, 0644);
 MODULE_PARM_DESC(smart_bypass, "Allow rapid multi-toggle flashing sequence while blocking single open (default: true)");
 
+static int flash_detect_count = 0;
+module_param(flash_detect_count, int, 0444);
+MODULE_PARM_DESC(flash_detect_count, "Total number of firmware flashing sequences detected (read-only)");
+
 static unsigned long last_toggle_jiffies = 0;
 static int toggle_seq_count = 0;
 
@@ -35,9 +40,12 @@ static inline bool is_flashing_sequence(void)
 {
 	unsigned long now = jiffies;
 	if (!smart_bypass)
+	{
 		return false;
+	}
 
-	if (time_after(now, last_toggle_jiffies + msecs_to_jiffies(600))) {
+	if (time_after(now, last_toggle_jiffies + msecs_to_jiffies(600)))
+	{
 		toggle_seq_count = 1;
 		last_toggle_jiffies = now;
 		return false;
@@ -45,6 +53,11 @@ static inline bool is_flashing_sequence(void)
 
 	toggle_seq_count++;
 	last_toggle_jiffies = now;
+	if (toggle_seq_count == 2)
+	{
+		flash_detect_count++;
+		pr_info("kernel-uart-patcher: Firmware flashing sequence detected (count: %d)! Temporarily bypassing DTR/RTS suppression\\n", flash_detect_count);
+	}
 	return (toggle_seq_count >= 2);
 }
 """

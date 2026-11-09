@@ -697,6 +697,7 @@ class UARTShieldApp(QWidget):
         self.tray = None
         self._tray_icons = {}
         self.config = load_user_config()
+        self._last_flash_detect_count = {}
 
         self._setup_window()
         self._build_ui()
@@ -1192,6 +1193,13 @@ class UARTShieldApp(QWidget):
                 f"↺ {escaped_body}</span>"
             )
 
+        # 10c. Firmware Flashing Bypass
+        if re.match(r"^\[FLASH\]", body):
+            return (
+                f"{indent_prefix}<span style=\"color: #0d9488; font-weight: bold;\">"
+                f"⚡ {escaped_body}</span>"
+            )
+
         # 11. Standard info / compiler chatter
         if indent_spaces > 0:
             return f"{indent_prefix}<span style=\"color: #64748b;\">{escaped_body}</span>"
@@ -1444,6 +1452,22 @@ class UARTShieldApp(QWidget):
         if os.path.isfile(param_file):
             self.current_param_exists = True
             try:
+                # Check flash detect count for debugging
+                fcfile = f"/sys/module/{driver}/parameters/flash_detect_count"
+                if os.path.isfile(fcfile):
+                    try:
+                        with open(fcfile, "r") as f:
+                            cnt = int(f.read().strip())
+                        last_cnt = self._last_flash_detect_count.get(driver, 0)
+                        if cnt > last_cnt:
+                            self._last_flash_detect_count[driver] = cnt
+                            self.log(
+                                f"[FLASH] Firmware flashing detected on {driver} ({port})! "
+                                f"Bypassed DTR/RTS suppression (total: {cnt})."
+                            )
+                    except Exception:
+                        pass
+
                 with open(param_file, "r") as f:
                     val = f.read().strip()
                 if val in ("Y", "1"):
