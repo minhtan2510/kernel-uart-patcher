@@ -1695,7 +1695,7 @@ class UARTShieldApp(QWidget):
         # Context Menu
         self.tray_menu = QMenu()
 
-        # 1. Primary action: Restore main window (Standard Linux Tray convention)
+        # Group 1: Navigation / Window
         act_open = self.tray_menu.addAction("Open Control Panel")
         font_bold = act_open.font()
         font_bold.setBold(True)
@@ -1704,36 +1704,22 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 2. Informational header (current device & mode)
-        self.tray_act_device = self.tray_menu.addAction("No device connected")
+        # Group 2: Hardware & Protection Operations
+        self.tray_act_device = self.tray_menu.addAction("No Device Connected")
         self.tray_act_device.setEnabled(False)
 
-        self.tray_menu.addSeparator()
-
-        # 3. Checkable quick toggle
         self.tray_act_toggle = self.tray_menu.addAction("Block Reset Pins (Patch Active)")
         self.tray_act_toggle.setCheckable(True)
         self.tray_act_toggle.setEnabled(False)
         self.tray_act_toggle.triggered.connect(self._on_tray_toggle)
 
-        self.tray_menu.addSeparator()
-
-        # 4. Trigger Hardware Reset
-        self.tray_act_reset = self.tray_menu.addAction("Trigger Hardware Reset")
+        self.tray_act_reset = self.tray_menu.addAction("Trigger Reset")
         self.tray_act_reset.setEnabled(False)
         self.tray_act_reset.triggered.connect(self.trigger_reset)
 
         self.tray_menu.addSeparator()
 
-        # 5. Autostart
-        self.tray_act_autostart = self.tray_menu.addAction("Start Minimized on Boot")
-        self.tray_act_autostart.setCheckable(True)
-        self.tray_act_autostart.setChecked(self._is_autostart_enabled())
-        self.tray_act_autostart.toggled.connect(self._on_autostart_toggled)
-
-        self.tray_menu.addSeparator()
-
-        # 6. Terminate app completely
+        # Group 3: Application Exit
         act_quit = self.tray_menu.addAction("Quit")
         act_quit.triggered.connect(self._quit_app)
 
@@ -1763,20 +1749,20 @@ class UARTShieldApp(QWidget):
             toggle_enabled = False
         elif not self.current_param_exists:
             state = "default"
-            label = f"{driver} ({port}) • SYSTEM DEFAULT"
-            tooltip = f"Kernel UART Patcher\n{driver} ({port}) — SYSTEM DEFAULT (unpatched)"
+            label = f"{port} ({driver}) • SYSTEM DEFAULT"
+            tooltip = f"Kernel UART Patcher\n{port} ({driver}) — SYSTEM DEFAULT (unpatched)"
             toggle_checked = False
             toggle_enabled = False
         elif self.current_protected:
             state = "active"
-            label = f"{driver} ({port}) • PATCH ACTIVE"
-            tooltip = f"Kernel UART Patcher\n{driver} ({port}) — PATCH ACTIVE ✓ (Resets blocked)"
+            label = f"{port} ({driver}) • PATCH ACTIVE"
+            tooltip = f"Kernel UART Patcher\n{port} ({driver}) — PATCH ACTIVE ✓ (Resets blocked)"
             toggle_checked = True
             toggle_enabled = True
         else:
             state = "inactive"
-            label = f"{driver} ({port}) • PATCH INACTIVE"
-            tooltip = f"Kernel UART Patcher\n{driver} ({port}) — PATCH INACTIVE (DTR asserts on connect)"
+            label = f"{port} ({driver}) • PATCH INACTIVE"
+            tooltip = f"Kernel UART Patcher\n{port} ({driver}) — PATCH INACTIVE (DTR asserts on connect)"
             toggle_checked = False
             toggle_enabled = True
 
@@ -1794,10 +1780,10 @@ class UARTShieldApp(QWidget):
         self.tray_act_toggle.setEnabled(toggle_enabled and not self.is_operating)
 
         if port and self.devices:
-            self.tray_act_reset.setText(f"Trigger Reset ({port})")
+            self.tray_act_reset.setText("Trigger Reset")
             self.tray_act_reset.setEnabled(not self.is_operating)
         else:
-            self.tray_act_reset.setText("Trigger Hardware Reset")
+            self.tray_act_reset.setText("Trigger Reset")
             self.tray_act_reset.setEnabled(False)
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
