@@ -531,6 +531,51 @@ class PreferencesDialog(QDialog):
             QDialog {
                 background-color: #f8fafc;
             }
+            QGroupBox {
+                font-weight: bold;
+                font-size: 12px;
+                color: #0f172a;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 14px;
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+                background-color: transparent;
+                color: #0f172a;
+            }
+            QCheckBox {
+                background-color: transparent;
+                font-weight: bold;
+                font-size: 12px;
+                color: #0f172a;
+                spacing: 8px;
+            }
+            QCheckBox:hover {
+                background-color: transparent;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 4px;
+            }
+            QCheckBox::indicator:hover {
+                border: 1px solid #3b82f6;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2563eb;
+                border: 1px solid #2563eb;
+            }
+            QLabel {
+                background-color: transparent;
+                color: #0f172a;
+            }
             QComboBox {
                 background-color: #ffffff;
                 border: 1px solid #cbd5e1;
@@ -572,23 +617,6 @@ class PreferencesDialog(QDialog):
 
         # 1. Hardware Pin Mapping Group
         grp_pins = QGroupBox("Hardware Pin Mapping")
-        grp_pins.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                font-size: 12px;
-                color: #0f172a;
-                border: 1px solid #cbd5e1;
-                border-radius: 8px;
-                margin-top: 8px;
-                padding-top: 14px;
-                background-color: #ffffff;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 4px;
-            }
-        """)
         pin_layout = QFormLayout(grp_pins)
         pin_layout.setContentsMargins(14, 12, 14, 12)
         pin_layout.setSpacing(10)
@@ -620,17 +648,16 @@ class PreferencesDialog(QDialog):
 
         # 2. System Startup Group
         grp_startup = QGroupBox("System Startup")
-        grp_startup.setStyleSheet(grp_pins.styleSheet())
         startup_layout = QVBoxLayout(grp_startup)
         startup_layout.setContentsMargins(14, 12, 14, 12)
         startup_layout.setSpacing(4)
 
         self.chk_autostart = QCheckBox("Start Minimized on Boot")
+        self.chk_autostart.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         initial_autostart = False
         if self.parent() and hasattr(self.parent(), "_is_autostart_enabled"):
             initial_autostart = self.parent()._is_autostart_enabled()
         self.chk_autostart.setChecked(initial_autostart)
-        self.chk_autostart.setStyleSheet("font-weight: bold; font-size: 12px; color: #0f172a;")
         startup_layout.addWidget(self.chk_autostart)
 
         layout.addWidget(grp_startup)
