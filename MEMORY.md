@@ -313,6 +313,17 @@
     - Automatically renders and exports the vector USB plug icon to `~/.local/share/icons/kernel-uart-patcher.png` (64x64) for desktop environment icon integration.
 * **Consequences:** End-users can enable/disable system startup with a single click from either the tray or the main window, converting the tool into a persistent background hardware protection daemon.
 
+### [2026-11-09] ADR-26: Hardware Reset Trigger (Autonomous DTR/RTS Pulse Delivery)
+* **Context:** When debugging or after configuring MCUs/gimbals, users often need to reset the device. Because the patch actively blocks DTR/RTS resets, users had to physically disconnect the USB cable or press the board's hardware reset button.
+* **Decision:** Implemented a one-click "Trigger Reset" mechanism on both GUI (`⚡ Reset` button in port row, shortcut `Ctrl+T`) and System Tray (`⚡ Trigger Reset (<port>)` action):
+  1. If kernel module parameter `disable_dtr_rts` is currently active (shield ON), temporarily set it to `N` (disarm shield).
+  2. Pulse DTR/RTS lines asynchronously via `ResetWorker` using standard POSIX `fcntl`/`termios` ioctl:
+     - Step 1: Assert `TIOCM_RTS` (low), clear `TIOCM_DTR` (high) for 120ms (triggers ESP32 EN active low; prepares Arduino DTR edge).
+     - Step 2: Assert `TIOCM_DTR`, clear `TIOCM_RTS` for 120ms (pulses Arduino/STM32 NRST cap; releases ESP32 EN to normal run mode).
+     - Step 3: De-assert both lines back to normal idle (high) for 50ms.
+  3. Re-arm reset shield parameter back to `Y` (shield ON).
+* **Consequences:** Eliminates physical cable replugging while keeping the shield fully active during normal operation. Does not block GUI or tray event loop.
+
 ---
 
 ## 3. Known Gotchas & Constraints

@@ -9,6 +9,10 @@ protecting connected MCUs, gimbals, and development boards from unwanted resets.
 
 import os
 import sys
+import time
+import fcntl
+import termios
+import struct
 import subprocess
 import re
 import html
@@ -332,6 +336,107 @@ class CommandWorker(QThread):
 
 
 # ------------------------------------------------------------------------------
+# Hardware Reset Worker (Autonomous DTR/RTS pulse delivery)
+# ------------------------------------------------------------------------------
+class ResetWorker(QThread):
+    """
+    @brief Asynchronous worker to pulse DTR/RTS lines for MCU hardware reset.
+    """
+    log_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, port: str, driver: str, was_patch_active: bool):
+        """
+        @brief Initialize reset worker.
+        @param port Serial port device path (e.g. /dev/ttyUSB0).
+        @param driver Driver module name (e.g. cp210x, ftdi_sio).
+        @param was_patch_active Whether kernel driver reset shield was active.
+        """
+        super().__init__()
+        self.port = port
+        self.driver = driver
+        self.was_patch_active = was_patch_active
+
+    def _write_param(self, path: str, val: str):
+        """
+        @brief Write boolean flag to driver sysfs parameter.
+        @param path Absolute path to sysfs parameter file.
+        @param val 'Y' or 'N' string.
+        """
+        try:
+            with open(path, "w") as f:
+                f.write(val)
+        except PermissionError:
+            subprocess.run(
+                ["pkexec", "tee", path],
+                input=val.encode(),
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+    def _pulse_reset(self, port_path: str):
+        """
+        @brief Pulse DTR and RTS modem control lines via ioctl to reset target hardware.
+        @param port_path TTY device path (e.g. /dev/ttyUSB0).
+        """
+        fd = os.open(port_path, os.O_RDWR | os.O_NONBLOCK | os.O_NOCTTY)
+        try:
+            # Step 1: Assert RTS, De-assert DTR (ESP32 EN active LOW; prepare Arduino DTR edge)
+            fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", termios.TIOCM_RTS))
+            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", termios.TIOCM_DTR))
+            time.sleep(0.12)
+
+            # Step 2: Assert DTR, De-assert RTS (Pulse Arduino/STM32 NRST cap; release ESP32 EN)
+            fcntl.ioctl(fd, termios.TIOCMBIS, struct.pack("I", termios.TIOCM_DTR))
+            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", termios.TIOCM_RTS))
+            time.sleep(0.12)
+
+            # Step 3: Release both lines back to idle (HIGH)
+            fcntl.ioctl(fd, termios.TIOCMBIC, struct.pack("I", termios.TIOCM_DTR | termios.TIOCM_RTS))
+            time.sleep(0.05)
+        finally:
+            os.close(fd)
+
+    def run(self):
+        """
+        @brief Execute reset sequence: temporarily unshield, pulse reset, and restore shield.
+        """
+        param_file = f"/sys/module/{self.driver}/parameters/disable_dtr_rts" if self.driver else ""
+        has_param = bool(param_file and os.path.isfile(param_file))
+        success = False
+        msg = ""
+
+        try:
+            if self.was_patch_active and has_param:
+                self.log_signal.emit(f"[RESET] Temporarily disarming reset shield on {self.driver}...")
+                self._write_param(param_file, "N")
+
+            self.log_signal.emit(f"[RESET] Pulsing DTR/RTS lines on {self.port}...")
+            self._pulse_reset(self.port)
+
+            self.log_signal.emit(f"[SUCCESS] Hardware reset triggered on {self.port}.")
+            success = True
+            msg = f"Reset {self.port} OK"
+
+        except Exception as e:
+            self.log_signal.emit(f"[ERROR] Reset failed: {e}")
+            success = False
+            msg = f"Reset failed: {e}"
+
+        finally:
+            if self.was_patch_active and has_param:
+                time.sleep(0.05)
+                try:
+                    self._write_param(param_file, "Y")
+                    self.log_signal.emit(f"[RESET] Reset shield re-armed on {self.driver}.")
+                except Exception as e:
+                    self.log_signal.emit(f"[WARN] Failed to re-arm shield: {e}")
+
+            self.finished_signal.emit(success, msg)
+
+
+# ------------------------------------------------------------------------------
 # Main Application Window
 # ------------------------------------------------------------------------------
 class UARTShieldApp(QWidget):
@@ -437,6 +542,24 @@ class UARTShieldApp(QWidget):
                 background-color: #f1f5f9;
                 border: 1px solid #3b82f6;
             }
+            QPushButton#btn_reset {
+                background-color: #ffffff;
+                color: #d97706;
+                border: 1px solid #fcd34d;
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton#btn_reset:hover {
+                background-color: #fffbeb;
+                border: 1px solid #b45309;
+            }
+            QPushButton#btn_reset:disabled {
+                color: #94a3b8;
+                border: 1px solid #e2e8f0;
+                background-color: #f8fafc;
+            }
             QPushButton#btn_patch {
                 background-color: #2563eb;
                 color: #ffffff;
@@ -530,6 +653,7 @@ class UARTShieldApp(QWidget):
         QShortcut(QKeySequence("Ctrl+R"), self, self.refresh_devices)
         QShortcut(QKeySequence(Qt.Key.Key_F5), self, self.refresh_devices)
         QShortcut(QKeySequence("Ctrl+Shift+R"), self, lambda: self.patch_driver(force=True))
+        QShortcut(QKeySequence("Ctrl+T"), self, self.trigger_reset)
         QShortcut(QKeySequence("Ctrl+Q"), self, self._quit_app)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, self.close)
 
@@ -549,6 +673,13 @@ class UARTShieldApp(QWidget):
         self.combo_ports.currentIndexChanged.connect(self._on_device_selected)
         self.combo_ports.doubleClicked.connect(self._copy_port_to_clipboard)
         port_row.addWidget(self.combo_ports, stretch=1)
+
+        self.btn_reset = QPushButton("⚡ Reset")
+        self.btn_reset.setObjectName("btn_reset")
+        self.btn_reset.setToolTip("Pulse DTR/RTS lines to trigger hardware reset on target MCU/Gimbal (Ctrl+T)")
+        self.btn_reset.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_reset.clicked.connect(self.trigger_reset)
+        port_row.addWidget(self.btn_reset)
 
         self.btn_scan = QPushButton("↻ Scan")
         self.btn_scan.setObjectName("btn_scan")
@@ -788,6 +919,13 @@ class UARTShieldApp(QWidget):
                 f"ℹ {escaped_body}</span>"
             )
 
+        # 10b. Step Hardware Reset
+        if re.match(r"^\[RESET\]", body):
+            return (
+                f"{indent_prefix}<span style=\"color: #d97706; font-weight: bold;\">"
+                f"⚡ {escaped_body}</span>"
+            )
+
         # 11. Standard info / compiler chatter
         if indent_spaces > 0:
             return f"{indent_prefix}<span style=\"color: #64748b;\">{escaped_body}</span>"
@@ -803,6 +941,7 @@ class UARTShieldApp(QWidget):
         self.active_task_label = task_name
 
         self.btn_scan.setEnabled(not operating)
+        self.btn_reset.setEnabled(not operating and bool(self.devices))
         self.btn_patch.setEnabled(
             not operating and not self.is_port_locked and not self.current_param_exists
         )
@@ -1009,6 +1148,8 @@ class UARTShieldApp(QWidget):
         if idx < 0 or idx >= len(self.devices):
             return
 
+        self.btn_reset.setEnabled(not self.is_operating)
+
         dev = self.devices[idx]
         driver = dev["driver"]
         port = dev["port"]
@@ -1121,6 +1262,7 @@ class UARTShieldApp(QWidget):
         self.current_param_exists = False
         self.current_protected = False
         self.port_warning.hide()
+        self.btn_reset.setEnabled(False)
         self.lbl_pill.setText("NO DEVICE")
         self.lbl_pill.setStyleSheet(
             f"background: #f8fafc; color: #64748b; border: 1.5px solid #cbd5e1; {PILL_STYLE_BASE}"
@@ -1315,9 +1457,14 @@ class UARTShieldApp(QWidget):
         self.tray_act_toggle.setEnabled(False)
         self.tray_act_toggle.triggered.connect(self._on_tray_toggle)
 
+        # 3. Trigger Hardware Reset
+        self.tray_act_reset = self.tray_menu.addAction("⚡ Trigger Hardware Reset")
+        self.tray_act_reset.setEnabled(False)
+        self.tray_act_reset.triggered.connect(self.trigger_reset)
+
         self.tray_menu.addSeparator()
 
-        # 3. Checkable Start on Boot
+        # 4. Checkable Start on Boot
         self.tray_act_autostart = self.tray_menu.addAction("Start Minimized on Boot")
         self.tray_act_autostart.setCheckable(True)
         self.tray_act_autostart.setChecked(self._is_autostart_enabled())
@@ -1388,6 +1535,13 @@ class UARTShieldApp(QWidget):
         self.tray_act_device.setText(label)
         self.tray_act_toggle.setChecked(toggle_checked)
         self.tray_act_toggle.setEnabled(toggle_enabled and not self.is_operating)
+
+        if port and self.devices:
+            self.tray_act_reset.setText(f"⚡ Trigger Reset ({port})")
+            self.tray_act_reset.setEnabled(not self.is_operating)
+        else:
+            self.tray_act_reset.setText("⚡ Trigger Hardware Reset")
+            self.tray_act_reset.setEnabled(False)
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """
@@ -1673,6 +1827,50 @@ class UARTShieldApp(QWidget):
             return
 
         self._run_core_command(["restore", driver, "-y"], f"Restoring {driver}")
+
+    def trigger_reset(self):
+        """
+        @brief Trigger hardware reset sequence on currently selected serial port.
+        """
+        if self.is_operating:
+            return
+
+        port = self._get_current_port()
+        driver = self._get_current_driver()
+        if not port or not os.path.exists(port):
+            self.log("[WARN] No valid serial port connected to reset.")
+            return
+
+        param_file = f"/sys/module/{driver}/parameters/disable_dtr_rts" if driver else ""
+        was_patch_active = False
+        if param_file and os.path.isfile(param_file):
+            try:
+                with open(param_file, "r") as f:
+                    was_patch_active = f.read().strip() in ("Y", "1")
+            except Exception:
+                was_patch_active = self.current_protected
+
+        self.set_operating(True, f"Resetting {port}")
+        self.worker = ResetWorker(port, driver, was_patch_active)
+        self.worker.log_signal.connect(self.log)
+        self.worker.finished_signal.connect(self._on_reset_finished)
+        self.worker.start()
+
+    def _on_reset_finished(self, success: bool, msg: str):
+        """
+        @brief Handle reset worker completion and refresh UI state.
+        @param success True if reset pulse succeeded.
+        @param msg Status message.
+        """
+        self.set_operating(False)
+        self._update_selected_info()
+        self._flash_footer(f"✓ {msg}" if success else f"✗ {msg}")
+
+        # Show desktop notification if minimized to tray
+        if not self.isVisible() and hasattr(self, "tray") and self.tray is not None:
+            icon = QSystemTrayIcon.MessageIcon.Information if success else QSystemTrayIcon.MessageIcon.Warning
+            port = self._get_current_port()
+            self.tray.showMessage("Kernel UART Patcher", f"Hardware reset on {port}: {msg}", icon, 2500)
 
 
 def main():
