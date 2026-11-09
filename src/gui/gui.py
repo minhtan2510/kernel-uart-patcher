@@ -682,7 +682,6 @@ class PreferencesDialog(QDialog):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 4px;
-                background-color: transparent;
                 color: #0f172a;
             }
             QCheckBox {
@@ -734,8 +733,8 @@ class PreferencesDialog(QDialog):
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(12)
 
-        # 1. Hardware Pin Mapping Group
-        grp_pins = QGroupBox("Hardware Pin Mapping")
+        # 1. Hardware Pin Role Mapping Group
+        grp_pins = QGroupBox("Hardware Pin Role Mapping")
         pin_layout = QFormLayout(grp_pins)
         pin_layout.setContentsMargins(14, 12, 14, 12)
         pin_layout.setSpacing(10)
