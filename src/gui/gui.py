@@ -665,6 +665,7 @@ class UARTShieldApp(QWidget):
         self._tray_icons = {}
         self.config = load_user_config()
         self._last_flash_detect_count = {}
+        self._last_tray_click_time = 0.0
 
         self._setup_window()
         self._build_ui()
@@ -1796,13 +1797,20 @@ class UARTShieldApp(QWidget):
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """
-        @brief Handle user click on tray icon.
+        @brief Handle user click on tray icon. Double-click opens the main window.
         @param reason Click reason enum.
         """
-        if reason in (
-            QSystemTrayIcon.ActivationReason.Trigger,
-            QSystemTrayIcon.ActivationReason.DoubleClick,
-        ):
+        now = time.time()
+        is_double_click = (
+            reason == QSystemTrayIcon.ActivationReason.DoubleClick
+            or (
+                reason == QSystemTrayIcon.ActivationReason.Trigger
+                and (now - getattr(self, "_last_tray_click_time", 0.0)) < 0.45
+            )
+        )
+        self._last_tray_click_time = now
+
+        if is_double_click:
             self._show_window()
 
     def _on_tray_toggle(self, checked: bool):
