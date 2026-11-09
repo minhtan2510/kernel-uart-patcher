@@ -23,6 +23,7 @@ __pycache__/
 # PyInstaller build artifacts
 build/
 dist/
+release/
 *.spec
 /Kernel UART Patcher
 
