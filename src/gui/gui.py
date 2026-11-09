@@ -1709,10 +1709,7 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 4. Settings & Autostart
-        act_settings = self.tray_menu.addAction("Pin Mapping & Settings...")
-        act_settings.triggered.connect(self.open_preferences)
-
+        # 4. Autostart
         self.tray_act_autostart = self.tray_menu.addAction("Start Minimized on Boot")
         self.tray_act_autostart.setCheckable(True)
         self.tray_act_autostart.setChecked(self._is_autostart_enabled())
@@ -1720,7 +1717,7 @@ class UARTShieldApp(QWidget):
 
         self.tray_menu.addSeparator()
 
-        # 4. Restore main window
+        # 5. Restore main window
         act_open = self.tray_menu.addAction("Open Control Panel")
         act_open.triggered.connect(self._show_window)
 
