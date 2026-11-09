@@ -19,6 +19,8 @@ import html
 import ctypes
 import gc
 import json
+import socket
+import select
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QFrame, QPlainTextEdit, QMessageBox,
@@ -551,6 +553,102 @@ class ResetWorker(QThread):
 
 
 # ------------------------------------------------------------------------------
+# Zero-Latency Udev Hotplug Monitor (Kernel Netlink uevent listener)
+# ------------------------------------------------------------------------------
+class UdevHotplugMonitor(QThread):
+    """
+    @brief Asynchronous kernel Netlink listener for zero-latency USB/UART hotplug detection.
+    """
+    device_changed = pyqtSignal(str, str)
+
+    def __init__(self, parent=None):
+        """
+        @brief Initialize hotplug monitor thread.
+        @param parent Optional parent QObject.
+        """
+        super().__init__(parent)
+        self._running = True
+        self._sock = None
+
+    def run(self):
+        """
+        @brief Listen for Linux kernel kobject uevents via raw Netlink socket.
+        """
+        NETLINK_KOBJECT_UEVENT = 15
+        try:
+            self._sock = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, NETLINK_KOBJECT_UEVENT)
+            self._sock.bind((0, 1))
+            self._sock.setblocking(False)
+        except Exception:
+            return
+
+        while self._running:
+            try:
+                r, _, _ = select.select([self._sock], [], [], 0.5)
+                if not r or not self._running:
+                    continue
+
+                data = self._sock.recv(4096)
+                if not data:
+                    continue
+
+                lines = data.decode("utf-8", errors="replace").split("\x00")
+                if not lines:
+                    continue
+
+                header = lines[0]
+                action = ""
+                subsystem = ""
+                devname = ""
+
+                if "@" in header:
+                    action = header.split("@", 1)[0]
+
+                for item in lines[1:]:
+                    if item.startswith("SUBSYSTEM="):
+                        subsystem = item.split("=", 1)[1]
+                    elif item.startswith("DEVNAME="):
+                        devname = item.split("=", 1)[1]
+                    elif item.startswith("ACTION=") and not action:
+                        action = item.split("=", 1)[1]
+
+                is_tty = (
+                    subsystem == "tty" or
+                    "ttyUSB" in header or
+                    "ttyACM" in header or
+                    "ttyUSB" in devname or
+                    "ttyACM" in devname
+                )
+                is_usb = subsystem == "usb" and action in ("add", "remove")
+
+                if is_tty or is_usb:
+                    self.device_changed.emit(action, devname or header)
+
+            except Exception:
+                if not self._running:
+                    break
+
+        if self._sock:
+            try:
+                self._sock.close()
+            except Exception:
+                pass
+            self._sock = None
+
+    def stop(self):
+        """
+        @brief Stop the monitor thread and close the underlying socket.
+        """
+        self._running = False
+        if self._sock:
+            try:
+                self._sock.close()
+            except Exception:
+                pass
+        self.wait(1000)
+
+
+# ------------------------------------------------------------------------------
 # Settings & Pin Mapping Dialog
 # ------------------------------------------------------------------------------
 class PreferencesDialog(QDialog):
@@ -773,9 +871,20 @@ class UARTShieldApp(QWidget):
         self.spinner_timer = QTimer(self)
         self.spinner_timer.timeout.connect(self._step_spinner)
 
+        # Periodic background polling timer (relaxed to 8s as fallback for sysfs/driver state)
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_devices)
-        self.refresh_timer.start(3000)
+        self.refresh_timer.start(8000)
+
+        # Zero-latency udev hotplug debounce timer (coalesces rapid kernel uevent bursts)
+        self.hotplug_debounce_timer = QTimer(self)
+        self.hotplug_debounce_timer.setSingleShot(True)
+        self.hotplug_debounce_timer.timeout.connect(self._on_hotplug_debounced)
+
+        # Zero-latency kernel Netlink uevent monitor
+        self.hotplug_monitor = UdevHotplugMonitor(self)
+        self.hotplug_monitor.device_changed.connect(self._on_hotplug_event)
+        self.hotplug_monitor.start()
 
         # Initial device scan first, then initialize tray with accurate state
         self.refresh_devices()
@@ -783,7 +892,7 @@ class UARTShieldApp(QWidget):
 
         if self.start_minimized:
             self.hide()
-            self.refresh_timer.setInterval(5000)
+            self.refresh_timer.setInterval(12000)
             _trim_memory()
 
     def _setup_window(self):
@@ -1383,6 +1492,21 @@ class UARTShieldApp(QWidget):
                 pass
 
         return driver, desc
+
+    def _on_hotplug_event(self, action: str, dev_name: str):
+        """
+        @brief Receive hardware hotplug event from kernel Netlink monitor.
+        @param action Uevent action ('add', 'remove', etc.).
+        @param dev_name Associated device name or path.
+        """
+        # Trigger single-shot debounce timer (150ms) to let sysfs stabilize
+        self.hotplug_debounce_timer.start(150)
+
+    def _on_hotplug_debounced(self):
+        """
+        @brief Handle debounced hotplug event and refresh connected serial devices.
+        """
+        self.refresh_devices()
 
     def refresh_devices(self):
         """
@@ -2000,7 +2124,7 @@ class UARTShieldApp(QWidget):
         """
         @brief Restore, focus, and raise the main application window.
         """
-        self.refresh_timer.setInterval(3000)
+        self.refresh_timer.setInterval(8000)
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
         self.show()
         self.raise_()
@@ -2011,6 +2135,8 @@ class UARTShieldApp(QWidget):
         """
         @brief Terminate application process completely, bypassing hide-to-tray.
         """
+        if hasattr(self, "hotplug_monitor") and self.hotplug_monitor.isRunning():
+            self.hotplug_monitor.stop()
         self._force_quit = True
         QApplication.quit()
 
@@ -2021,12 +2147,14 @@ class UARTShieldApp(QWidget):
         """
         tray_available = hasattr(self, "tray") and self.tray is not None and self.tray.isVisible()
         if self._force_quit or not tray_available:
+            if hasattr(self, "hotplug_monitor") and self.hotplug_monitor.isRunning():
+                self.hotplug_monitor.stop()
             event.accept()
             return
 
         event.ignore()
         self.hide()
-        self.refresh_timer.setInterval(5000)
+        self.refresh_timer.setInterval(12000)
         _trim_memory()
 
     # --------------------------------------------------------------------------
@@ -2242,6 +2370,7 @@ def main():
     tray_available = QSystemTrayIcon.isSystemTrayAvailable()
 
     window = UARTShieldApp(start_minimized=start_minimized and tray_available)
+    app.aboutToQuit.connect(lambda: window.hotplug_monitor.stop() if hasattr(window, "hotplug_monitor") else None)
     if not (start_minimized and tray_available):
         window.show()
 
