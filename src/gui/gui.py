@@ -292,7 +292,8 @@ class PortComboBox(QComboBox):
     """
     @brief Custom ComboBox that copies active port path on double-click,
            renders a crisp, modern anti-aliased vector chevron, and ensures
-           clean full-row background hover without box outlines.
+           clean full-row background hover without box outlines and with
+           perfectly rounded popup container borders.
     """
     doubleClicked = pyqtSignal()
 
@@ -300,6 +301,35 @@ class PortComboBox(QComboBox):
         super().__init__(parent)
         self.setItemDelegate(PortItemDelegate(self))
         self.view().setMouseTracking(True)
+
+        # Style the popup list view directly with 8px rounded border
+        self.view().setStyleSheet("""
+            QListView {
+                background-color: #ffffff;
+                border: 1px solid #cbd5e1;
+                border-radius: 8px;
+                padding: 4px;
+                outline: 0px;
+                selection-background-color: transparent;
+            }
+        """)
+
+        # Make the OS popup container window translucent and frameless so 8px radius renders cleanly
+        container = self.view().parentWidget()
+        if container:
+            container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            container.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+            container.setStyleSheet("background: transparent; border: none;")
+
+    def showPopup(self):
+        """
+        @brief Ensure popup container maintains transparent background on show.
+        """
+        container = self.view().parentWidget()
+        if container:
+            container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            container.setStyleSheet("background: transparent; border: none;")
+        super().showPopup()
 
     def mouseDoubleClickEvent(self, event):
         self.doubleClicked.emit()
@@ -515,7 +545,13 @@ class PreferencesDialog(QDialog):
                 border: 1px solid #3b82f6;
             }
             QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 24px;
                 border: none;
+                border-top-right-radius: 8px;
+                border-bottom-right-radius: 8px;
+                background: transparent;
             }
             QComboBox QAbstractItemView {
                 background-color: #ffffff;
@@ -734,7 +770,13 @@ class UARTShieldApp(QWidget):
                 border: 1px solid #3b82f6;
             }
             QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 24px;
                 border: none;
+                border-top-right-radius: 8px;
+                border-bottom-right-radius: 8px;
+                background: transparent;
             }
             QComboBox QAbstractItemView {
                 background-color: #ffffff;
