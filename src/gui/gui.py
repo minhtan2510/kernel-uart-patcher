@@ -1460,6 +1460,8 @@ class UARTShieldApp(QWidget):
         self.tray_act_toggle.setEnabled(False)
         self.tray_act_toggle.triggered.connect(self._on_tray_toggle)
 
+        self.tray_menu.addSeparator()
+
         # 3. Trigger Hardware Reset
         self.tray_act_reset = self.tray_menu.addAction("Trigger Hardware Reset")
         self.tray_act_reset.setEnabled(False)
