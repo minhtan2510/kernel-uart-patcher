@@ -354,6 +354,45 @@ class PortComboBox(QComboBox):
         p.drawPath(path)
 
 
+class SettingCheckBox(QCheckBox):
+    """
+    @brief Clean custom checkbox with smooth rounded corners and crisp vector checkmark.
+    """
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        box_size = 18
+        y = int((self.height() - box_size) / 2)
+        box_rect = QRectF(0, y, box_size, box_size)
+
+        is_checked = self.isChecked()
+        is_hover = self.underMouse()
+
+        if is_checked:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("#2563eb"))
+            p.drawRoundedRect(box_rect, 4.0, 4.0)
+
+            pen = QPen(QColor("#ffffff"), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+            p.setPen(pen)
+            path = QPainterPath()
+            path.moveTo(box_rect.left() + 4.5, box_rect.top() + 9.5)
+            path.lineTo(box_rect.left() + 7.5, box_rect.top() + 13.0)
+            path.lineTo(box_rect.left() + 13.5, box_rect.top() + 5.5)
+            p.drawPath(path)
+        else:
+            border_color = QColor("#3b82f6") if is_hover else QColor("#cbd5e1")
+            p.setPen(QPen(border_color, 1.4))
+            p.setBrush(QColor("#ffffff"))
+            p.drawRoundedRect(box_rect, 4.0, 4.0)
+
+        text_rect = QRectF(box_size + 10, 0, self.width() - box_size - 10, self.height())
+        p.setFont(self.font())
+        p.setPen(QColor("#0f172a"))
+        p.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), self.text())
+
+
 # ------------------------------------------------------------------------------
 # Background Command Worker (Non-blocking pkexec integration)
 # ------------------------------------------------------------------------------
@@ -553,24 +592,6 @@ class PreferencesDialog(QDialog):
                 font-weight: bold;
                 font-size: 12px;
                 color: #0f172a;
-                spacing: 8px;
-            }
-            QCheckBox:hover {
-                background-color: transparent;
-            }
-            QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
-                background-color: #ffffff;
-                border: 1px solid #cbd5e1;
-                border-radius: 4px;
-            }
-            QCheckBox::indicator:hover {
-                border: 1px solid #3b82f6;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #2563eb;
-                border: 1px solid #2563eb;
             }
             QLabel {
                 background-color: transparent;
@@ -652,8 +673,9 @@ class PreferencesDialog(QDialog):
         startup_layout.setContentsMargins(14, 12, 14, 12)
         startup_layout.setSpacing(4)
 
-        self.chk_autostart = QCheckBox("Start Minimized on Boot")
-        self.chk_autostart.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.chk_autostart = SettingCheckBox("Start Minimized on Boot")
+        self.chk_autostart.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chk_autostart.setFixedHeight(24)
         initial_autostart = False
         if self.parent() and hasattr(self.parent(), "_is_autostart_enabled"):
             initial_autostart = self.parent()._is_autostart_enabled()
