@@ -15,18 +15,19 @@ Completely neutralizes DTR and RTS assertion (pin pulled LOW) across all paths:
 import sys
 import re
 
-def patch_cp210x(content: str) -> str:
-    # 1. Add module parameter
-    mod_param = """
+PARAM_HEADER = """
 /* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
 static bool disable_dtr_rts = true;
 module_param(disable_dtr_rts, bool, 0644);
 MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
 """
+
+def patch_cp210x(content: str) -> str:
+    # 1. Add module parameter
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in cp210x.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + PARAM_HEADER, 1)
 
     # 2. Force DTR/RTS inactive immediately upon opening UART in cp210x_open
     open_pattern = re.compile(
@@ -57,10 +58,13 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     tiocmset_replacement = r"""\1
 
 	if (disable_dtr_rts) {
-		/* Deep patch: intercept and block any DTR/RTS assertion from userspace or kernel */
+		/* Deep patch: intercept and block DTR/RTS assertion */
 		set &= ~(TIOCM_DTR | TIOCM_RTS);
 		clear |= (TIOCM_DTR | TIOCM_RTS);
 	}"""
+    content, n = tiocmset_pattern.subn(tiocmset_replacement, content, count=1)
+    if n == 0:
+        raise ValueError("Failed to patch cp210x_tiocmset_port")
     content, n = tiocmset_pattern.subn(tiocmset_replacement, content, count=1)
     if n == 0:
         raise ValueError("Failed to patch cp210x_tiocmset_port")
@@ -75,7 +79,7 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
     dtr_replacement = """static void cp210x_dtr_rts(struct usb_serial_port *port, int on)
 {
 	if (disable_dtr_rts) {
-		/* Deep patch: always force DTR/RTS inactive regardless of 'on' */
+		/* Deep patch: always force DTR/RTS inactive on port_open/close callback */
 		cp210x_tiocmset_port(port, 0, TIOCM_DTR | TIOCM_RTS);
 		return;
 	}
@@ -106,16 +110,10 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
 
 def patch_ch341(content: str) -> str:
     # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in ch341.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + PARAM_HEADER, 1)
 
     # 2. Patch ch341_tiocmset
     tiocmset_pattern = re.compile(
@@ -148,16 +146,10 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
 
 def patch_ftdi(content: str) -> str:
     # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in ftdi_sio.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + PARAM_HEADER, 1)
 
     # 2. Patch update_mctrl
     target_mctrl = "clear &= ~set;\t/* 'set' takes precedence over 'clear' */"
@@ -174,16 +166,10 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
 
 def patch_cdc_acm(content: str) -> str:
     # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
     target = '#include <linux/module.h>'
     if target not in content:
         raise ValueError("Target include not found in cdc-acm.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + PARAM_HEADER, 1)
 
     # 2. Patch acm_port_dtr_rts
     dtr_target = "if (active)\n\t\tval = USB_CDC_CTRL_DTR | USB_CDC_CTRL_RTS;\n\telse\n\t\tval = 0;"
@@ -223,16 +209,10 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
 
 def patch_pl2303(content: str) -> str:
     # 1. Add module parameter
-    mod_param = """
-/* Added by uart_deep_patch: module parameter to disable DTR/RTS assertion */
-static bool disable_dtr_rts = true;
-module_param(disable_dtr_rts, bool, 0644);
-MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device reset (default: true)");
-"""
     target = '#include <linux/usb/serial.h>'
     if target not in content:
         raise ValueError("Target include not found in pl2303.c")
-    content = content.replace(target, target + "\n" + mod_param, 1)
+    content = content.replace(target, target + "\n" + PARAM_HEADER, 1)
 
     # 2. Patch pl2303_dtr_rts
     dtr_target = "if (on)\n\t\tpriv->line_control |= (CONTROL_DTR | CONTROL_RTS);\n\telse\n\t\tpriv->line_control &= ~(CONTROL_DTR | CONTROL_RTS);"
@@ -264,6 +244,11 @@ MODULE_PARM_DESC(disable_dtr_rts, "Disable DTR/RTS assertion to prevent device r
 		set &= ~(TIOCM_DTR | TIOCM_RTS);
 		clear |= (TIOCM_DTR | TIOCM_RTS);
 	}"""
+    content, n = tiocmset_pattern.subn(tiocmset_repl, content, count=1)
+    if n == 0:
+        raise ValueError("Failed to patch pl2303_tiocmset in pl2303.c")
+
+    return content
     content, n = tiocmset_pattern.subn(tiocmset_repl, content, count=1)
     if n == 0:
         raise ValueError("Failed to patch pl2303_tiocmset in pl2303.c")

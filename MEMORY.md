@@ -315,14 +315,16 @@
 
 ### [2026-11-09] ADR-26: Hardware Reset Trigger (Autonomous DTR/RTS Pulse Delivery)
 * **Context:** When debugging or after configuring MCUs/gimbals, users often need to reset the device. Because the patch actively blocks DTR/RTS resets, users had to physically disconnect the USB cable or press the board's hardware reset button.
-* **Decision:** Implemented a one-click "Trigger Reset" mechanism on both GUI (`⚡ Reset` button in port row, shortcut `Ctrl+T`) and System Tray (`⚡ Trigger Reset (<port>)` action):
-  1. If kernel module parameter `disable_dtr_rts` is currently active (shield ON), temporarily set it to `N` (disarm shield).
-  2. Pulse DTR/RTS lines asynchronously via `ResetWorker` using standard POSIX `fcntl`/`termios` ioctl:
-     - Step 1: Assert `TIOCM_RTS` (low), clear `TIOCM_DTR` (high) for 120ms (triggers ESP32 EN active low; prepares Arduino DTR edge).
-     - Step 2: Assert `TIOCM_DTR`, clear `TIOCM_RTS` for 120ms (pulses Arduino/STM32 NRST cap; releases ESP32 EN to normal run mode).
-     - Step 3: De-assert both lines back to normal idle (high) for 50ms.
-  3. Re-arm reset shield parameter back to `Y` (shield ON).
+* **Decision:** Implemented a one-click "Trigger Reset" mechanism on both GUI (`Reset Device` button in footer, shortcut `Ctrl+T`) and System Tray (`Trigger Reset (<port>)` action).
 * **Consequences:** Eliminates physical cable replugging while keeping the shield fully active during normal operation. Does not block GUI or tray event loop.
+
+### [2026-11-09] ADR-27: Hardware Pin Mapping & Smart Flashing Bypass (Sequence Pattern)
+* **Context:** Firmware flashing tools (`esptool`, `avrdude`, `stm32flash`) need DTR/RTS toggles to enter bootloader mode, but a strict deep patch blocks all toggles. Additionally, different boards wire DTR/RTS differently (e.g. DTR=Reset vs DTR=Boot).
+* **Decision:**
+  1. **Pin Mapping Configuration:** Added user-configurable `dtr_role` and `rts_role` in `PreferencesDialog` (saved to `~/.config/kernel-uart-patcher/config.json`) with bidirectional automatic inversion.
+  2. **Smart Flashing Bypass (Sequence Pattern Detection):** Added `smart_bypass` kernel module parameter (default: `true`). In kernel driver `tiocmset`, single `open()` events are 100% blocked, while rapid alternating toggle sequences ($\ge 2$ within 600ms) are recognized as intentional flashing sequences and permitted.
+  3. **Role-Aware Reset & Bootloader Mode:** `ResetWorker` now supports both normal reboot (pulses Reset line while holding Boot inactive) and dedicated Bootloader mode (asserts Boot, pulses Reset, releases Boot), accessible via GUI Settings and System Tray.
+* **Consequences:** Flashing tools work out of the box without manual shield toggling, while single-open resets (gTune, monitors) remain completely blocked. Preserves 0.00% background CPU and 0 subprocesses.
 
 ---
 

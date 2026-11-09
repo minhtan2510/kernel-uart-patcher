@@ -34,6 +34,9 @@
 
 set -euo pipefail
 
+# Ensure standard system binary paths are always present in sanitized subshells (pkexec/cron/etc.)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT_NAME=$(basename "$0")
 BACKUP_DIR="/var/backups/uart_dtr_patch"
@@ -237,6 +240,17 @@ check_deps()
         missing+=("build-essential")
     fi
 
+    # Kernel compiler check: verify if compiler is available
+    local req_gcc
+    req_gcc=$(grep -oP '^CC\s*=\s*\$\(CROSS_COMPILE\)\K(gcc-\d+)' "/lib/modules/${KVER}/build/Makefile" 2>/dev/null || echo "")
+    if [ -n "$req_gcc" ]; then
+        if ! command -v "$req_gcc" &>/dev/null && ! command -v "x86_64-linux-gnu-${req_gcc}" &>/dev/null; then
+            if ! command -v gcc &>/dev/null; then
+                missing+=("$req_gcc")
+            fi
+        fi
+    fi
+
     # Curl
     if ! command -v curl &>/dev/null; then
         missing+=("curl")
@@ -370,7 +384,37 @@ build_module()
 
     local build_log="$WORK_DIR/build.log"
 
-    if ! make -C "$kdir" M="$build_dir" modules > "$build_log" 2>&1; then
+    # Prepare compiler shims and resolve compiler binary
+    local req_gcc
+    req_gcc=$(grep -oP '^CC\s*=\s*\$\(CROSS_COMPILE\)\K(gcc-\d+)' "$kdir/Makefile" 2>/dev/null || echo "")
+
+    local cc_bin=""
+    if [ -n "$req_gcc" ] && command -v "$req_gcc" &>/dev/null; then
+        cc_bin=$(command -v "$req_gcc")
+    elif [ -n "$req_gcc" ] && command -v "x86_64-linux-gnu-${req_gcc}" &>/dev/null; then
+        cc_bin=$(command -v "x86_64-linux-gnu-${req_gcc}")
+    elif command -v gcc &>/dev/null; then
+        cc_bin=$(command -v gcc)
+    elif command -v clang &>/dev/null; then
+        cc_bin=$(command -v clang)
+    fi
+
+    # Create temporary compiler shim directory if kernel Makefile hardcodes a missing gcc binary
+    if [ -n "$req_gcc" ] && [ -n "$cc_bin" ] && ! command -v "$req_gcc" &>/dev/null; then
+        local shim_dir="$WORK_DIR/shims"
+        mkdir -p "$shim_dir"
+        ln -sf "$cc_bin" "$shim_dir/$req_gcc"
+        ln -sf "$cc_bin" "$shim_dir/x86_64-linux-gnu-$req_gcc"
+        export PATH="$shim_dir:$PATH"
+        detail "Created compiler shim: $req_gcc -> $cc_bin"
+    fi
+
+    local make_cmd=(make -C "$kdir" M="$build_dir" modules)
+    if [ -n "$cc_bin" ]; then
+        make_cmd+=(CC="$cc_bin" HOSTCC="$cc_bin")
+    fi
+
+    if ! "${make_cmd[@]}" > "$build_log" 2>&1; then
         err "Build failed. Last 20 lines of build log:"
         echo ""
         tail -20 "$build_log" >&2
