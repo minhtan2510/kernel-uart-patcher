@@ -73,6 +73,9 @@ AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, "kernel-uart-patcher.desktop")
 APP_ICON_DIR = os.path.expanduser("~/.local/share/icons")
 APP_ICON_FILE = os.path.join(APP_ICON_DIR, "kernel-uart-patcher.png")
 
+APP_NAME = "Kernel UART Patcher"
+APP_VERSION = "v1.3.1"
+
 CONFIG_DIR = os.path.expanduser("~/.config/kernel-uart-patcher")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
@@ -898,7 +901,7 @@ class UARTShieldApp(QWidget):
         """
         @brief Configure window title, geometry, and hardware styling.
         """
-        self.setWindowTitle("Kernel UART Patcher")
+        self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.setFixedSize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
         self._center_on_screen()
 
