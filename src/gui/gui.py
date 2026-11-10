@@ -75,7 +75,7 @@ APP_ICON_DIR = os.path.expanduser("~/.local/share/icons")
 APP_ICON_FILE = os.path.join(APP_ICON_DIR, "kernel-uart-patcher.png")
 
 APP_NAME = "Kernel UART Patcher"
-APP_VERSION = "v1.3.1"
+APP_VERSION = "v1.4.0"
 
 CONFIG_DIR = os.path.expanduser("~/.config/kernel-uart-patcher")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
