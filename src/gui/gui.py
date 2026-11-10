@@ -36,6 +36,7 @@ from PyQt6.QtGui import (
     QPainter, QColor, QFont, QPen, QBrush, QKeySequence, QShortcut,
     QPainterPath, QIcon, QPixmap
 )
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 
 if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     BASE_DIR = sys._MEIPASS
@@ -2368,11 +2369,48 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
+    # Single Instance Enforcement via QLocalSocket / QLocalServer IPC
+    socket_name = f"kernel_uart_patcher_ipc_{os.getuid()}"
+    client_sock = QLocalSocket()
+    client_sock.connectToServer(socket_name)
+    if client_sock.waitForConnected(300):
+        print("[INFO] Another instance of Kernel UART Patcher is already running. Activating existing instance...")
+        client_sock.write(b"SHOW\n")
+        client_sock.flush()
+        client_sock.waitForBytesWritten(500)
+        client_sock.disconnectFromServer()
+        sys.exit(0)
+
+    # Clean up stale socket file from potential previous crashes
+    QLocalServer.removeServer(socket_name)
+    ipc_server = QLocalServer(app)
+    if not ipc_server.listen(socket_name):
+        print(f"[WARN] Failed to start single-instance IPC server: {ipc_server.errorString()}")
+
     start_minimized = ("--minimized" in sys.argv or "-m" in sys.argv)
     tray_available = QSystemTrayIcon.isSystemTrayAvailable()
 
     window = UARTShieldApp(start_minimized=start_minimized and tray_available)
-    app.aboutToQuit.connect(lambda: window.hotplug_monitor.stop() if hasattr(window, "hotplug_monitor") else None)
+
+    def _on_ipc_incoming():
+        sock = ipc_server.nextPendingConnection()
+        if sock:
+            if sock.waitForReadyRead(500):
+                cmd = sock.readAll().data().decode("utf-8", errors="ignore").strip()
+                if "SHOW" in cmd:
+                    window._show_window()
+            sock.disconnectFromServer()
+
+    ipc_server.newConnection.connect(_on_ipc_incoming)
+
+    def _cleanup_before_exit():
+        if hasattr(window, "hotplug_monitor") and window.hotplug_monitor.isRunning():
+            window.hotplug_monitor.stop()
+        ipc_server.close()
+        QLocalServer.removeServer(socket_name)
+
+    app.aboutToQuit.connect(_cleanup_before_exit)
+
     if not (start_minimized and tray_available):
         window.show()
 
