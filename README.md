@@ -1,4 +1,4 @@
-# Kernel UART Patcher
+# Linux Serial Patcher
 
 > **Linux DTR/RTS Reset Shield & Control Panel**  
 > Prevent unwanted MCU, gimbal, and development board reboots caused by serial connections on Linux.
@@ -9,13 +9,13 @@
 
 When opening a serial port on Linux, the kernel and userspace libraries (PySerial, QtSerialPort, ROS, gimbal tools) automatically assert **DTR/RTS** lines (pulling them LOW / 0V). On microcontrollers (STM32, ESP32, Arduino) and drone gimbals (Gremsy), `DTR` is hardwired to the hardware `RESET`/`NRST` pin, triggering continuous device reboots upon connect.
 
-**Kernel UART Patcher** solves this at the kernel level by applying an out-of-tree **Deep Patch** to Linux serial drivers. It exposes a live runtime parameter (`disable_dtr_rts`) under `/sys/module/<driver>/parameters/`, allowing you to lock reset pins HIGH (3.3V) with 1 click without reconnecting USB or recompiling.
+**Linux Serial Patcher** solves this at the kernel level by applying an out-of-tree **Deep Patch** to Linux serial drivers. It exposes a live runtime parameter (`disable_dtr_rts`) under `/sys/module/<driver>/parameters/`, allowing you to lock reset pins HIGH (3.3V) with 1 click without reconnecting USB or recompiling.
 
 ---
 
 ## Highlights
 
-- **Standalone Single Binary**: 55 MB self-contained ELF executable (`Kernel UART Patcher`). Zero setup required — runs on any Ubuntu/Debian system without pre-installed Python or PyQt6.
+- **Standalone Single Binary**: 55 MB self-contained ELF executable (`Linux_Serial_Patcher`). Zero setup required — runs on any Ubuntu/Debian system without pre-installed Python or PyQt6.
 - **System Tray Companion**: Minimizes silently to system tray. Features right-click quick toggle (**Block Reset Pins**) and HiDPI status glyphs (`✓` Active, `—` Inactive).
 - **Ultra-Low Overhead**: 0 subprocess spawns in background, 0.00% idle CPU utilization, and sub-millisecond hardware scans via pure Linux sysfs/udev cache.
 - **Live On/Off Toggle**: Switch between **Protected Mode** (DTR held HIGH) and **Flash/Bootloader Mode** (DTR asserts normally) instantly.
@@ -26,9 +26,9 @@ When opening a serial port on Linux, the kernel and userspace libraries (PySeria
 ## Quick Start
 
 ### 1. Run Standalone Executable (Recommended)
-Simply double-click **`Kernel UART Patcher`** or run from terminal:
+Simply double-click **`Linux_Serial_Patcher`** or run from terminal:
 ```bash
-./"Kernel UART Patcher"
+./Linux_Serial_Patcher
 ```
 
 ### 2. Run from Source (Development)
@@ -63,7 +63,7 @@ sudo ./src/core/uart_kernel_patch.sh restore cp210x
 
 ```text
 LinuxUART/
-├── Kernel UART Patcher       # Standalone executable binary (zero dependencies)
+├── Linux_Serial_Patcher      # Standalone executable binary (zero dependencies)
 ├── README.md                 # Project documentation
 ├── MEMORY.md                 # Architecture Decision Records & persistent memory
 ├── AGENT.md                  # AI pair-programming context & hardware rules
@@ -73,6 +73,8 @@ LinuxUART/
 │   └── build.sh              # Package into standalone ELF binary via PyInstaller
 └── src/                      # Source code
     ├── core/                 # Kernel patch engine (uart_kernel_patch.sh, patch_driver.py)
+    └── gui/                  # Modern PyQt6 control panel & tray companion (gui.py)
+```
     └── gui/                  # Modern PyQt6 control panel & tray companion (gui.py)
 ```
 

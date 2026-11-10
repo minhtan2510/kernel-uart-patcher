@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# run.sh — Entry Point Launcher for Kernel UART Patcher GUI
+# run.sh — Entry Point Launcher for Linux Serial Patcher GUI
 # ==============================================================================
 
 set -euo pipefail

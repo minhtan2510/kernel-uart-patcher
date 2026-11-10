@@ -27,6 +27,8 @@ release/
 *.spec
 /Kernel UART Patcher
 /Kernel_UART_Patcher
+/Linux Serial Patcher
+/Linux_Serial_Patcher
 
 # IDE configurations
 .vscode/

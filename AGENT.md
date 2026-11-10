@@ -1,12 +1,12 @@
 # AGENT.md — Operating Guidelines for AI Assistants
 
-This document provides essential instructions, architectural boundaries, coding conventions, and operational workflows for any AI coding assistant working on the **Kernel UART Patcher** (`LinuxUART`) repository.
+This document provides essential instructions, architectural boundaries, coding conventions, and operational workflows for any AI coding assistant working on the **Linux Serial Patcher** (`LinuxUART`) repository.
 
 ---
 
 ## 1. Project Purpose & Scope
 
-The **Kernel UART Patcher** repository provides a reliable, kernel-level solution to prevent Ubuntu Linux and userspace applications from asserting `DTR`/`RTS` (pulling them LOW / 0V) when opening serial ports. This prevents connected hardware (such as Gremsy gimbals, STM32, ESP32, and Arduino boards) from experiencing unwanted resets triggered through hardware `RESET`/`NRST` lines.
+The **Linux Serial Patcher** repository provides a reliable, kernel-level solution to prevent Ubuntu Linux and userspace applications from asserting `DTR`/`RTS` (pulling them LOW / 0V) when opening serial ports. This prevents connected hardware (such as Gremsy gimbals, STM32, ESP32, and Arduino boards) from experiencing unwanted resets triggered through hardware `RESET`/`NRST` lines.
 
 ---
 

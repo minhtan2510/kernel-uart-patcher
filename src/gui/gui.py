@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Kernel UART Patcher — Ultra-Compact Modern Minimalist Control Panel (PyQt6 Edition).
+Linux Serial Patcher — Ultra-Compact Modern Minimalist Control Panel (PyQt6 Edition).
 
 A sleek, hardware-accelerated desktop utility to prevent Linux kernel
 and userspace applications from asserting DTR/RTS on serial connection,
@@ -70,15 +70,16 @@ def _trim_memory():
         pass
 
 AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
-AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, "kernel-uart-patcher.desktop")
+AUTOSTART_FILE = os.path.join(AUTOSTART_DIR, "linux-serial-patcher.desktop")
 APP_ICON_DIR = os.path.expanduser("~/.local/share/icons")
-APP_ICON_FILE = os.path.join(APP_ICON_DIR, "kernel-uart-patcher.png")
+APP_ICON_FILE = os.path.join(APP_ICON_DIR, "linux-serial-patcher.png")
 
-APP_NAME = "Kernel UART Patcher"
-APP_VERSION = "v1.4.0"
+APP_NAME = "Linux Serial Patcher"
+APP_VERSION = "v1.5.0"
 
-CONFIG_DIR = os.path.expanduser("~/.config/kernel-uart-patcher")
+CONFIG_DIR = os.path.expanduser("~/.config/linux-serial-patcher")
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+LEGACY_CONFIG_FILE = os.path.expanduser("~/.config/kernel-uart-patcher/config.json")
 
 DEFAULT_CONFIG = {
     "dtr_role": "Reset",
@@ -88,13 +89,14 @@ DEFAULT_CONFIG = {
 
 def load_user_config() -> dict:
     """
-    @brief Load user settings from JSON file with fallback defaults.
+    @brief Load user settings from JSON file with fallback defaults and legacy migration.
     @return Configuration dictionary.
     """
     cfg = dict(DEFAULT_CONFIG)
-    if os.path.isfile(CONFIG_FILE):
+    target_file = CONFIG_FILE if os.path.isfile(CONFIG_FILE) else LEGACY_CONFIG_FILE
+    if os.path.isfile(target_file):
         try:
-            with open(CONFIG_FILE, "r") as f:
+            with open(target_file, "r") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
                     cfg.update(data)
@@ -1958,25 +1960,25 @@ class UARTShieldApp(QWidget):
         if not self.devices:
             state = "none"
             label = "No Device Connected ⚪"
-            tooltip = "Kernel UART Patcher — No device"
+            tooltip = f"{APP_NAME} — No device"
             toggle_checked = False
             toggle_enabled = False
         elif not self.current_param_exists:
             state = "default"
             label = f"{port} ({driver}) • SYSTEM DEFAULT ⚪"
-            tooltip = f"Kernel UART Patcher\n{port} ({driver}) — SYSTEM DEFAULT (unpatched)"
+            tooltip = f"{APP_NAME}\n{port} ({driver}) — SYSTEM DEFAULT (unpatched)"
             toggle_checked = False
             toggle_enabled = False
         elif self.current_protected:
             state = "active"
             label = f"{port} ({driver}) • PATCH ACTIVE 🟢"
-            tooltip = f"Kernel UART Patcher\n{port} ({driver}) — PATCH ACTIVE ✓ (Resets blocked)"
+            tooltip = f"{APP_NAME}\n{port} ({driver}) — PATCH ACTIVE ✓ (Resets blocked)"
             toggle_checked = True
             toggle_enabled = True
         else:
             state = "inactive"
             label = f"{port} ({driver}) • PATCH INACTIVE 🟠"
-            tooltip = f"Kernel UART Patcher\n{port} ({driver}) — PATCH INACTIVE (DTR asserts on connect)"
+            tooltip = f"{APP_NAME}\n{port} ({driver}) — PATCH INACTIVE (DTR asserts on connect)"
             toggle_checked = False
             toggle_enabled = True
 
@@ -2041,7 +2043,7 @@ class UARTShieldApp(QWidget):
 
         # When running from source, prefer root binary if available, else scripts/run.sh
         root_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-        for bin_name in ("Kernel_UART_Patcher", "Kernel UART Patcher"):
+        for bin_name in ("Linux_Serial_Patcher", "Linux Serial Patcher", "Kernel_UART_Patcher", "Kernel UART Patcher"):
             bin_candidate = os.path.join(root_dir, bin_name)
             if os.path.isfile(bin_candidate) and os.access(bin_candidate, os.X_OK):
                 return f'"{bin_candidate}" --minimized'
@@ -2092,7 +2094,7 @@ class UARTShieldApp(QWidget):
                     "[Desktop Entry]\n"
                     "Type=Application\n"
                     "Version=1.0\n"
-                    "Name=Kernel UART Patcher\n"
+                    f"Name={APP_NAME}\n"
                     "GenericName=Serial DTR/RTS Reset Shield\n"
                     "Comment=Prevent unwanted serial DTR/RTS resets on USB-UART adapters\n"
                     f"Exec={exec_cmd}\n"
@@ -2358,7 +2360,7 @@ class UARTShieldApp(QWidget):
         if not self.isVisible() and hasattr(self, "tray") and self.tray is not None:
             icon = QSystemTrayIcon.MessageIcon.Information if success else QSystemTrayIcon.MessageIcon.Warning
             port = self._get_current_port()
-            self.tray.showMessage("Kernel UART Patcher", f"Hardware reset on {port}: {msg}", icon, 2500)
+            self.tray.showMessage(APP_NAME, f"Hardware reset on {port}: {msg}", icon, 2500)
 
 
 def main():
@@ -2370,11 +2372,11 @@ def main():
     app.setStyle("Fusion")
 
     # Single Instance Enforcement via QLocalSocket / QLocalServer IPC
-    socket_name = f"kernel_uart_patcher_ipc_{os.getuid()}"
+    socket_name = f"linux_serial_patcher_ipc_{os.getuid()}"
     client_sock = QLocalSocket()
     client_sock.connectToServer(socket_name)
     if client_sock.waitForConnected(300):
-        print("[INFO] Another instance of Kernel UART Patcher is already running. Activating existing instance...")
+        print(f"[INFO] Another instance of {APP_NAME} is already running. Activating existing instance...")
         client_sock.write(b"SHOW\n")
         client_sock.flush()
         client_sock.waitForBytesWritten(500)

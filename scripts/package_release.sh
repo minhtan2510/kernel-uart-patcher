@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# package_release.sh — Release Packaging Script for Kernel UART Patcher
+# package_release.sh — Release Packaging Script for Linux Serial Patcher
 #
 # Packages the standalone executable and user guide into distributable
 # archives (.tar.gz and .zip) with automated SHA256 checksum generation.
@@ -18,7 +18,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT_DIR"
 
-APP_NAME="Kernel_UART_Patcher"
+APP_NAME="Linux_Serial_Patcher"
 GUIDE_FILE="USER_GUIDE.md"
 RELEASE_DIR="$ROOT_DIR/release"
 
@@ -38,7 +38,7 @@ if [[ ! "$VERSION" =~ ^v ]]; then
     VERSION="v${VERSION}"
 fi
 
-ARCH_NAME="Kernel-UART-Patcher-${VERSION}-linux-x86_64"
+ARCH_NAME="Linux-Serial-Patcher-${VERSION}-linux-x86_64"
 
 echo "======================================================================"
 echo " Packaging Release: ${ARCH_NAME}"

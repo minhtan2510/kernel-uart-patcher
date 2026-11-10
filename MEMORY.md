@@ -1,12 +1,12 @@
 # Project Memory & Architecture Context
 
 ## 1. Project Overview & Core Stack
-* **Repository:** `LinuxUART` — **Kernel UART Patcher** (Linux USB-UART DTR/RTS Reset Shield).
+* **Repository:** `LinuxUART` — **Linux Serial Patcher** (Linux USB-UART DTR/RTS Reset Shield).
 * **Core Problem:** Linux kernel and userspace serial libraries (PySerial, QtSerialPort, Gimbal GUIs) automatically assert `DTR`/`RTS` (driving them LOW / 0V) on connect. On gimbals (Gremsy) and microcontrollers (STM32, ESP32, Arduino), `DTR` is hardwired to the MCU hardware `NRST`/`RESET` line, causing continuous resets upon connection.
 * **Architecture:**
-  - **Entry Points:** Standalone executable [`Kernel UART Patcher`](file:///home/minhtan/Desktop/Script/LinuxUART/Kernel%20UART%20Patcher) in root for end-users, or developer launcher [`scripts/run.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/scripts/run.sh).
+  - **Entry Points:** Standalone executable [`Linux_Serial_Patcher`](file:///home/minhtan/Desktop/Script/LinuxUART/Linux_Serial_Patcher) in root for end-users, or developer launcher [`scripts/run.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/scripts/run.sh).
   - **Core Layer ([`src/core/`](file:///home/minhtan/Desktop/Script/LinuxUART/src/core)):** Out-of-tree kernel driver deep-patching engine ([`patch_driver.py`](file:///home/minhtan/Desktop/Script/LinuxUART/src/core/patch_driver.py), [`uart_kernel_patch.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/src/core/uart_kernel_patch.sh)).
-  - **GUI Layer ([`src/gui/`](file:///home/minhtan/Desktop/Script/LinuxUART/src/gui)):** Python 3 Tkinter/ttk ultra-compact modern minimalist control widget ([`gui.py`](file:///home/minhtan/Desktop/Script/LinuxUART/src/gui/gui.py)).
+  - **GUI Layer ([`src/gui/`](file:///home/minhtan/Desktop/Script/LinuxUART/src/gui)):** Modern PyQt6 control panel & system tray companion ([`gui.py`](file:///home/minhtan/Desktop/Script/LinuxUART/src/gui/gui.py)).
 
 ---
 
@@ -272,7 +272,7 @@
   - Context switches reduced by **>90%**.
 
 ### [2026-11-06] ADR-22: Standalone Single Executable Packaging with PyInstaller
-* **Context:** User requested packaging the entire project into a single standalone executable file (`Kernel UART Patcher`), matching the structure and distribution format of `Gremsy Firmware Debug Tools` (ELF 64-bit LSB stripped binary, ~60MB).
+* **Context:** User requested packaging the entire project into a single standalone executable file (`Linux_Serial_Patcher`), matching the structure and distribution format of `Gremsy Firmware Debug Tools` (ELF 64-bit LSB stripped binary, ~60MB).
 * **Architecture & Implementation:**
   - Integrated PyInstaller packaging with `--onefile --windowed`.
   - Bundled core driver patcher scripts into the binary payload via `--add-data`:
@@ -281,14 +281,14 @@
   - Dynamic `sys._MEIPASS` runtime asset resolution:
     - Updated `src/gui/gui.py` to detect `sys.frozen` and resolve `CORE_SCRIPT = os.path.join(sys._MEIPASS, "core", "uart_kernel_patch.sh")`.
     - Automatically enforces `0o755` executable permissions on `sys._MEIPASS`, `core/`, `uart_kernel_patch.sh`, and `patch_driver.py` at startup, ensuring seamless `pkexec` root execution without permission faults.
-  - Implemented automated one-click build script [`build.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/build.sh):
-    - Automatically installs PyInstaller if missing, compiles with `--clean --noconfirm`, and copies the final binary directly to the project root: `Kernel UART Patcher` (55MB ELF executable).
-* **Consequences:** The application is now fully portable. Users can copy the single `Kernel UART Patcher` binary to any Linux machine and run it directly without installing Python, PyQt6, or dependencies.
+  - Implemented automated one-click build script [`build.sh`](file:///home/minhtan/Desktop/Script/LinuxUART/scripts/build.sh):
+    - Automatically installs PyInstaller if missing, compiles with `--clean --noconfirm`, and copies the final binary directly to the project root: `Linux_Serial_Patcher` (56MB ELF executable).
+* **Consequences:** The application is now fully portable. Users can copy the single `Linux_Serial_Patcher` binary to any Linux machine and run it directly without installing Python, PyQt6, or dependencies.
 
 ### [2026-11-06] ADR-23: Folder Restructuring for Developer Hygiene & Single-Click Release
 * **Context:** The repository root previously held mixed artifacts: standalone executable, build scripts, development launchers, and technical docs, alongside temporary PyInstaller build directories (`build/`, `dist/`, `*.spec`).
 * **Decision:**
-  - Root: Retains only `Kernel UART Patcher` (55MB standalone binary for instant single-click execution) and `README.md`.
+  - Root: Retains only `Linux_Serial_Patcher` (56MB standalone binary for instant single-click execution) and `README.md`.
   - `docs/`: Technical context and architecture records (`MEMORY.md`, `AGENT.md`).
   - `scripts/`: Development and packaging automation (`run.sh` for source execution, `build.sh` for binary recompilation).
   - `src/`: Clean modular source code (`src/core/`, `src/gui/`).
@@ -308,9 +308,9 @@
     - Added checkable checkbox in main window footer: `Start on boot`.
     - Both controls are bidirectionally synchronized without signal recursion.
   - XDG Autostart Specification Compliance:
-    - Manages `~/.config/autostart/kernel-uart-patcher.desktop`.
-    - Resolves executable dynamically (`sys.executable` if frozen, or root `Kernel UART Patcher` binary, or `scripts/run.sh`).
-    - Automatically renders and exports the vector USB plug icon to `~/.local/share/icons/kernel-uart-patcher.png` (64x64) for desktop environment icon integration.
+    - Manages `~/.config/autostart/linux-serial-patcher.desktop`.
+    - Resolves executable dynamically (`sys.executable` if frozen, or root `Linux_Serial_Patcher` binary, or `scripts/run.sh`).
+    - Automatically renders and exports the vector USB plug icon to `~/.local/share/icons/linux-serial-patcher.png` (64x64) for desktop environment icon integration.
 * **Consequences:** End-users can enable/disable system startup with a single click from either the tray or the main window, converting the tool into a persistent background hardware protection daemon.
 
 ### [2026-11-09] ADR-26: Hardware Reset Trigger (Autonomous DTR/RTS Pulse Delivery)
@@ -325,6 +325,15 @@
   2. **Smart Flashing Bypass (Sequence Pattern Detection):** Added `smart_bypass` kernel module parameter (default: `true`). In kernel driver `tiocmset`, single `open()` events are 100% blocked, while rapid alternating toggle sequences ($\ge 2$ within 600ms) are recognized as intentional flashing sequences and permitted.
   3. **Role-Aware Reset & Bootloader Mode:** `ResetWorker` now supports both normal reboot (pulses Reset line while holding Boot inactive) and dedicated Bootloader mode (asserts Boot, pulses Reset, releases Boot), accessible via GUI Settings and System Tray.
 * **Consequences:** Flashing tools work out of the box without manual shield toggling, while single-open resets (gTune, monitors) remain completely blocked. Preserves 0.00% background CPU and 0 subprocesses.
+
+### [2026-11-10] ADR-28: Rebrand Project Identity to `Linux Serial Patcher`
+* **Context:** The previous title `Kernel UART Patcher` was technically imprecise: the tool does not patch native SoC/on-chip UART hardware controllers (8250/PL011) or the monolithic kernel core, but specifically targets USB-to-Serial adapter drivers (`drivers/usb/serial/*`) and modem control lines (DTR/RTS).
+* **Decision:**
+  - Officially rebranded the desktop application, executable, and documentation to **`Linux Serial Patcher`**.
+  - Binary executable: `Linux_Serial_Patcher` (standalone ELF binary).
+  - Config directory: `~/.config/linux-serial-patcher` with automatic backward-compatible fallback to legacy `~/.config/kernel-uart-patcher`.
+  - Udev rule: `/etc/udev/rules.d/99-linux-serial-patcher.rules`.
+* **Consequences:** Accurate technical alignment with Linux serial subsystem naming conventions, eliminated ambiguity regarding hardware UART vs USB-serial bridges.
 
 ---
 

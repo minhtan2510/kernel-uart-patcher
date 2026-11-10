@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# build.sh — Standalone Single Executable Packager for Kernel UART Patcher
+# build.sh — Standalone Single Executable Packager for Linux Serial Patcher
 #
 # Generates a standalone single-file ELF executable binary via PyInstaller
 # identical to the packaging format of 'Gremsy Firmware Debug Tools'.
@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT_DIR"
 
-OUTPUT_NAME="Kernel_UART_Patcher"
+OUTPUT_NAME="Linux_Serial_Patcher"
 
 echo "======================================================================"
 echo " Packaging: $OUTPUT_NAME (Standalone ELF Binary)"

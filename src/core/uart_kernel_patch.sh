@@ -589,9 +589,10 @@ install_module()
     fi
 
     # Install persistent udev rule so parameter stays writable without root password
-    local udev_file="/etc/udev/rules.d/99-kernel-uart-patcher.rules"
+    rm -f /etc/udev/rules.d/99-kernel-uart-patcher.rules 2>/dev/null || true
+    local udev_file="/etc/udev/rules.d/99-linux-serial-patcher.rules"
     cat << 'EOF' > "$udev_file"
-# Kernel UART Patcher: allow userspace to toggle DTR/RTS protection without root password
+# Linux Serial Patcher: allow userspace to toggle DTR/RTS protection without root password
 ACTION=="add", SUBSYSTEM=="module", KERNEL=="cp210x|ch341|ftdi_sio|pl2303|cdc_acm", RUN+="/bin/sh -c 'chmod 0666 /sys/module/%k/parameters/disable_dtr_rts 2>/dev/null || true'"
 ACTION=="add", SUBSYSTEM=="tty", KERNEL=="ttyUSB*|ttyACM*", RUN+="/bin/sh -c 'chmod 0666 /sys/module/*/parameters/disable_dtr_rts 2>/dev/null || true'"
 EOF
@@ -776,7 +777,7 @@ cmd_restore()
 
     # Clean up udev rule if no other patched drivers exist
     if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A "$BACKUP_DIR" 2>/dev/null)" ]; then
-        rm -f /etc/udev/rules.d/99-kernel-uart-patcher.rules 2>/dev/null || true
+        rm -f /etc/udev/rules.d/99-linux-serial-patcher.rules /etc/udev/rules.d/99-kernel-uart-patcher.rules 2>/dev/null || true
         udevadm control --reload-rules 2>/dev/null || true
     fi
 

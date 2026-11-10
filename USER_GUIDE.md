@@ -1,4 +1,4 @@
-# Kernel UART Patcher — Quick Guide
+# Linux Serial Patcher — Quick Guide
 
 A tool to block unwanted hardware resets when opening serial ports on Linux.
 
@@ -6,9 +6,9 @@ A tool to block unwanted hardware resets when opening serial ports on Linux.
 
 ## 1. Launch
 
-Double-click `Kernel_UART_Patcher` or run in terminal:
+Double-click `Linux_Serial_Patcher` or run in terminal:
 ```bash
-./Kernel_UART_Patcher
+./Linux_Serial_Patcher
 ```
 *(Requires Secure Boot disabled in BIOS).*
 
